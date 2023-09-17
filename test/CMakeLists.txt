@@ -13,4 +13,5 @@ if (${GTest_FOUND})
    endfunction()
  
    create_test("test_kdtree" kdtree.cc)
+   create_test("test_utils" utils.cc)
 endif()

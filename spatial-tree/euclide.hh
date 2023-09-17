@@ -36,17 +36,12 @@ struct UnsafeAbsDiff {
 namespace st {
 
 template <typename T, typename... Args>
-__always_inline T euclidean_distance_squared(T x, Args... xs) {
+__always_inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
     if constexpr (std::is_floating_point_v<T> || std::is_signed_v<T>) {
-        return euclidean_distance_squared_impl(UnsafeAbsDiff<T>(), x, xs...);
+        return euclidean_distance_squared_impl(UnsafeAbsDiff<T>(), x1, x2, xs...);
     } else {
-        return euclidean_distance_squared_impl(SafeAbsDiff<T>(), x, xs...);
+        return euclidean_distance_squared_impl(SafeAbsDiff<T>(), x1, x2, xs...);
     }
-}
-
-template <typename T>
-__always_inline double euclidean_distance(T x1, T y1, T x2, T y2) {
-    return std::sqrt(euclidean_distance_squared(x1, y1, x2, y2));
 }
 
 }  // namespace st

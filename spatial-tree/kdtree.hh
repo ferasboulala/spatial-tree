@@ -15,7 +15,7 @@ namespace st {
 template <typename StorageType, typename CoordinateType = int>
 class KDTree {
 public:
-    using __CoordinateType = StorageType;
+    using __CoordinateType = CoordinateType;
 
     KDTree() = default;
     ~KDTree() = default;
@@ -128,9 +128,9 @@ public:
     template <typename... Args>
     std::pair<Iterator, bool> emplace(CoordinateType x, CoordinateType y, Args &&...args) {
         if (nodes_.empty()) {
-            nodes_.emplace_back(x, y, 0, Node::NO_PARENT);
+            nodes_.emplace_back(x, y, 0);
             storage_.emplace_back(std::forward<Args>(args)...);
-            return {Iterator(this, storage_.size() - 1), true};
+            return {Iterator(this, 0), true};
         }
 
         return emplace_recursively(0, {x, y}, std::forward<Args>(args)...);
@@ -148,17 +148,17 @@ public:
         return emplace(x, y, storage);
     }
 
-    Iterator nearest(CoordinateType x, CoordinateType y) const {
+    std::vector<Iterator> nearest(CoordinateType x, CoordinateType y) const {
+        std::vector<Iterator> ret;
+
         if (empty()) {
-            return end();
+            return ret;
         }
 
-        uint64_t       nearest_index = 0;
-        CoordinateType nearest_distance_squared = euclidean_distance_squared(
-            x, nodes_.front().coordinates[0], y, nodes_.front().coordinates[1]);
-        nearest_recursive(0, {x, y}, &nearest_index, nearest_distance_squared);
+        CoordinateType nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
+        nearest_recursive(0, {x, y}, nearest_distance_squared, ret);
 
-        return Iterator(this, nearest_index);
+        return ret;
     }
 
     __always_inline void find(const BoundingBox<CoordinateType> &bbox,
@@ -187,7 +187,7 @@ private:
         static constexpr uint64_t NO_PARENT = std::numeric_limits<uint64_t>::max();
         uint64_t                  parent;
 
-        Node(CoordinateType x, CoordinateType y, uint8_t dim, uint64_t p)
+        Node(CoordinateType x, CoordinateType y, uint8_t dim, uint64_t p = Node::NO_PARENT)
             : dimension(dim), parent(p) {
             coordinates[0] = x;
             coordinates[1] = y;
@@ -233,30 +233,33 @@ private:
 
     void nearest_recursive(uint64_t                             node_index,
                            const std::array<CoordinateType, 2> &xy,
-                           uint64_t                            *nearest_index,
-                           CoordinateType                      &nearest_distance_squared) const {
+                           CoordinateType                      &nearest_distance_squared,
+                           std::vector<Iterator>               &nearest_points) const {
         if (node_index == NO_INDEX) {
             return;
         }
 
-        const Node                &parent = nodes_[node_index];
+        const Node          &parent = nodes_[node_index];
         const CoordinateType distance_squared =
             euclidean_distance_squared(xy[0], parent.coordinates[0], xy[1], parent.coordinates[1]);
         if (distance_squared < nearest_distance_squared) {
             nearest_distance_squared = distance_squared;
-            *nearest_index = node_index;
+            nearest_points.clear();
+            nearest_points.push_back(Iterator(this, node_index));
+        } else if (distance_squared == nearest_distance_squared) {
+            nearest_points.push_back(Iterator(this, node_index));
         }
 
         const uint64_t left_or_right = xy[parent.dimension] > parent.coordinates[parent.dimension];
         const uint64_t child_index = parent.children[left_or_right];
 
+        nearest_recursive(child_index, xy, nearest_distance_squared, nearest_points);
+
         const CoordinateType lower_bound_distance_squared =
             euclidean_distance_squared(xy[parent.dimension], parent.coordinates[parent.dimension]);
-
-        nearest_recursive(child_index, xy, nearest_index, nearest_distance_squared);
         if (lower_bound_distance_squared < nearest_distance_squared) {
             nearest_recursive(
-                parent.children[1 - left_or_right], xy, nearest_index, nearest_distance_squared);
+                parent.children[1 - left_or_right], xy, nearest_distance_squared, nearest_points);
         }
     }
 
