@@ -43,7 +43,7 @@ protected:
                               (DISTRIBUTION_END - DISTRIBUTION_BEG + 1) <=
                           std::numeric_limits<CoordT>::max());
 
-            st::KDTree<int>               tree;
+            TreeType               tree;
             std::random_device            device;
             std::uniform_int_distribution distribution(DISTRIBUTION_BEG, DISTRIBUTION_END);
             std::unordered_set<CoordT>    added_points;
@@ -117,7 +117,7 @@ protected:
                               (DISTRIBUTION_END - DISTRIBUTION_BEG + 1) <=
                           std::numeric_limits<CoordT>::max());
 
-            st::KDTree<int>               tree;
+            TreeType               tree;
             std::random_device            device;
             std::uniform_int_distribution distribution(DISTRIBUTION_BEG, DISTRIBUTION_END);
             for (int i = 0; i < TEST_SIZE; ++i) {
@@ -163,7 +163,7 @@ protected:
                               (DISTRIBUTION_END - DISTRIBUTION_BEG + 1) <=
                           std::numeric_limits<CoordT>::max());
 
-            st::KDTree<int> tree;
+            TreeType tree;
             ASSERT_TRUE(tree.nearest(0, 0).empty());
 
             std::random_device            device;

@@ -15,6 +15,7 @@ struct BoundingBox {
         assert(top_x <= bottom_x);
         assert(top_y >= bottom_y);
     }
+    /// FIXME: Re-order with top/bottom x and bottom/top y
     __always_inline BoundingBox(CoordinateType top_x_,
                                 CoordinateType top_y_,
                                 CoordinateType bottom_x_,

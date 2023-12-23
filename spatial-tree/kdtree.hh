@@ -15,6 +15,7 @@ namespace st {
 template <typename StorageType, typename CoordinateType = int>
 class KDTree {
 public:
+    // For testing purposes.
     using __CoordinateType = CoordinateType;
 
     KDTree() = default;
@@ -68,7 +69,7 @@ public:
             }
 
             const Node *node = &tree_->nodes_[index_];
-            while (node->parent != Node::NO_PARENT) {
+            while (node->parent != NO_PARENT) {
                 const Node &parent_node = tree_->nodes_[node->parent];
                 if (parent_node.children[0] == index_ && visit(node->parent, 1)) {
                     return *this;
@@ -177,18 +178,19 @@ public:
 
 private:
     static constexpr uint64_t NO_INDEX = std::numeric_limits<uint64_t>::max();
+    static constexpr uint64_t NO_PARENT = std::numeric_limits<uint64_t>::max();
+
     struct Node {
         std::array<CoordinateType, 2> coordinates;
         // 0 is left, 1 is right
         std::array<uint64_t, 2> children;
+        uint64_t                parent;
+
         // 0 is x, 1 is y
         uint8_t dimension;
 
-        static constexpr uint64_t NO_PARENT = std::numeric_limits<uint64_t>::max();
-        uint64_t                  parent;
-
-        Node(CoordinateType x, CoordinateType y, uint8_t dim, uint64_t p = Node::NO_PARENT)
-            : dimension(dim), parent(p) {
+        Node(CoordinateType x, CoordinateType y, uint8_t dim, uint64_t p = NO_PARENT)
+            : parent(p), dimension(dim) {
             coordinates[0] = x;
             coordinates[1] = y;
             children[0] = NO_INDEX;
@@ -215,7 +217,6 @@ private:
 
         Node &parent = nodes_[node_index];
         if (parent.coordinates[0] == xy[0] && parent.coordinates[1] == xy[1]) {
-            storage_[node_index] = std::move(StorageType(std::forward<Args>(args)...));
             return {Iterator(this, node_index), false};
         }
 
