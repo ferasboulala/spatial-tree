@@ -22,54 +22,58 @@ TEST(TestQuadTree, UniqueInsertions) {
         ASSERT_EQ(tree.size(), 4 * test_size);
         tree.clear();
         ASSERT_TRUE(tree.empty());
-        // ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
+        ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
     }
 }
 
 TEST(TestQuadTree, RandomInsertions) {
-    const auto test = [&]<typename CoordT>() {
-        static constexpr int    TEST_SIZE = 10000;
-        static constexpr CoordT DISTRIBUTION_BEG = 0;
-        static constexpr CoordT DISTRIBUTION_END = 1000;
-        static_assert((DISTRIBUTION_END - DISTRIBUTION_BEG + 1) *
-                          (DISTRIBUTION_END - DISTRIBUTION_BEG + 1) <=
-                      std::numeric_limits<CoordT>::max());
+    const std::vector<int> test_sizes = {1000, 10000, 12345, 13, 256, 2048, 5, 999};
+    for (int test_size : test_sizes) {
+        const auto test = [&]<typename CoordT>() {
+            static constexpr CoordT DISTRIBUTION_BEG = 0;
+            static constexpr CoordT DISTRIBUTION_END = 1000;
+            static_assert((DISTRIBUTION_END - DISTRIBUTION_BEG + 1) *
+                              (DISTRIBUTION_END - DISTRIBUTION_BEG + 1) <=
+                          std::numeric_limits<CoordT>::max());
 
-        st::QuadTree<int, CoordT> tree(
-            {DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG});
-        std::random_device            device;
-        std::uniform_int_distribution distribution(static_cast<int>(DISTRIBUTION_BEG),
-                                                   static_cast<int>(DISTRIBUTION_END));
-        std::unordered_set<int>       added_points;
-        for (int i = 0; i < TEST_SIZE; ++i) {
-            const CoordT x = distribution(device);
-            const CoordT y = distribution(device);
-            const bool   was_inserted_in_tree = tree.emplace(x, y, i).second;
-            const CoordT unique_hash = x + (DISTRIBUTION_END - DISTRIBUTION_BEG + 1) * y;
-            const bool   was_inserted_in_map = added_points.insert(unique_hash).second;
-            ASSERT_EQ(was_inserted_in_map, was_inserted_in_tree);
-        }
+            st::QuadTree<int, CoordT> tree(
+                {DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG});
+            std::random_device            device;
+            std::uniform_int_distribution distribution(static_cast<int>(DISTRIBUTION_BEG),
+                                                       static_cast<int>(DISTRIBUTION_END));
+            std::unordered_set<int>       added_points;
+            for (int i = 0; i < test_size; ++i) {
+                const CoordT x = distribution(device);
+                const CoordT y = distribution(device);
+                const bool   was_inserted_in_tree = tree.emplace(x, y, i).second;
+                const CoordT unique_hash = x + (DISTRIBUTION_END - DISTRIBUTION_BEG + 1) * y;
+                const bool   was_inserted_in_map = added_points.insert(unique_hash).second;
+                ASSERT_EQ(was_inserted_in_map, was_inserted_in_tree);
+            }
 
-        ASSERT_EQ(added_points.size(), tree.size());
-        // ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
-    };
+            ASSERT_EQ(added_points.size(), tree.size());
+            ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
+        };
 
-    test.operator()<float>();
-    test.operator()<double>();
-    test.operator()<int>();
-    test.operator()<unsigned>();
+        test.operator()<float>();
+        test.operator()<double>();
+        test.operator()<int>();
+        test.operator()<unsigned>();
+    }
 }
 
 TEST(TestQuadTree, IteratorCoverage) {
-    static constexpr int   TEST_SIZE = 10000;
-    st::QuadTree<int, int> tree({-TEST_SIZE, TEST_SIZE, TEST_SIZE, -TEST_SIZE});
-    // ASSERT_FALSE(std::distance(tree.begin(), tree.end()));
+    const std::vector<int> test_sizes = {1000, 10000, 12345, 13, 256, 2048, 5, 999};
+    for (int test_size : test_sizes) {
+        st::QuadTree<int, int> tree({-test_size, test_size, test_size, -test_size});
+        ASSERT_FALSE(std::distance(tree.begin(), tree.end()));
 
-    for (int i = 0; i < TEST_SIZE; ++i) {
-        ASSERT_TRUE(tree.emplace(i, i, i).second);
+        for (int i = 0; i < test_size; ++i) {
+            ASSERT_TRUE(tree.emplace(i, i, i).second);
+        }
+        ASSERT_EQ(tree.size(), test_size);
+        ASSERT_EQ(std::distance(tree.begin(), tree.end()), test_size);
     }
-    ASSERT_EQ(tree.size(), TEST_SIZE);
-    // ASSERT_EQ(std::distance(tree.begin(), tree.end()), TEST_SIZE);
 }
 
 // TEST(TestQuadTree, Walk) {

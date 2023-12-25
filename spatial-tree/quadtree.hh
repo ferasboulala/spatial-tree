@@ -4,7 +4,6 @@
 #include <cassert>
 #include <cstdint>
 #include <functional>
-#include <iostream>
 #include <limits>
 #include <numeric>
 #include <tuple>
@@ -18,14 +17,14 @@
 /// Can stop recursing when h * w <= RECURSION_CUTOFF
 
 namespace st {
-template <typename StorageType, typename CoordinateType = int, uint64_t RECURSION_CUTOFF = 4>
+template <typename StorageType, typename CoordinateType = int, uint8_t RECURSION_CUTOFF = 4>
 class QuadTree {
 public:
+    static_assert(RECURSION_CUTOFF < 255);
+
     using __CoordinateType = CoordinateType;
 
-    QuadTree(const BoundingBox<CoordinateType> &boundaries) : boundaries_(boundaries), size_(0) {
-        nodes_.resize(1);
-    }
+    QuadTree(const BoundingBox<CoordinateType> &boundaries) : boundaries_(boundaries) { clear(); }
 
     ~QuadTree() = default;
 
@@ -33,6 +32,7 @@ public:
     __always_inline bool     empty() const { return size() == 0; }
     __always_inline void     clear() {
         nodes_.resize(1);
+        nodes_.front() = Node();
         size_ = 0;
     }
 
@@ -56,7 +56,26 @@ public:
         }
 
         // TODO
-        Iterator &operator++();
+        Iterator &operator++() {
+            assert(node_index != NO_INDEX);
+
+            const Node *node = &tree_->nodes_[node_index_];
+            if (!node->is_a_branch && ++item_index_ < node->leaves.size) {
+                return *this;
+            }
+
+            do {
+                ++node_index_;
+                node = &tree_->nodes_[node_index_];
+                item_index_ = 0;
+                /// TODO: Add a Node::empty function to use here.
+            } while ((node->is_a_branch || !node->leaves.size) &&
+                     node_index_ < tree_->nodes_.size());
+
+            if (node_index_ == tree_->nodes_.size()) end();
+
+            return *this;
+        }
 
         __always_inline bool operator==(const Iterator &other) const {
             assert(tree_ == other.tree_);
@@ -66,7 +85,10 @@ public:
         __always_inline bool operator!=(const Iterator &other) const { return !(*this == other); }
 
     private:
-        __always_inline void end() { node_index_ = NO_INDEX; }
+        __always_inline void end() {
+            node_index_ = NO_INDEX;
+            item_index_ = 0;
+        }
 
         const QuadTree<StorageType, CoordinateType> *tree_;
 
@@ -83,8 +105,13 @@ public:
             return end();
         }
 
-        // TODO
-        return end();
+        Iterator ret(this, 0, 0);
+
+        const Node &first_node = nodes_.front();
+
+        if (!first_node.is_a_branch && first_node.leaves.size) return ret;
+
+        return ++ret;
     }
 
     template <typename... Args>
@@ -116,6 +143,7 @@ public:
 
     Iterator find(CoordinateType x, CoordinateType y) const {
         Iterator it = end();
+        /// Can be faster by checking a point.
         find({x, y, x, y}, [&](Iterator found) { it = found; });
 
         return it;
@@ -123,7 +151,6 @@ public:
 
 private:
     static constexpr uint64_t NO_INDEX = std::numeric_limits<uint64_t>::max();
-    static constexpr uint64_t NO_PARENT = std::numeric_limits<uint64_t>::max();
     // This is the equivalent of a namespace. Can't use a class enum because it does not let me
     // index into arrays.
     struct Quadrant {
@@ -148,8 +175,6 @@ private:
     };
 
     struct Node {
-        uint64_t parent;
-
         union {
             NodeLeaves              leaves;
             std::array<uint64_t, 4> children;
@@ -240,7 +265,7 @@ private:
         if (node.leaves.size) {
             auto beg = node.leaves.items.begin();
             auto end = node.leaves.items.begin() + node.leaves.size;
-            auto it = std::find_if(beg, end, [&](auto& entry) {
+            auto it = std::find_if(beg, end, [&](auto &entry) {
                 const auto &[x_, y_, storage_] = entry;
                 return x == x_ && y == y_;
             });
