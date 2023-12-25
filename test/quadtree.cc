@@ -1,10 +1,10 @@
 #include "spatial-tree/quadtree.hh"
 
+#include <gtest/gtest.h>
+
+#include <string>
 
 #include "test/fixture.hh"
-
-#include <gtest/gtest.h>
-#include <string>
 
 TEST(QuadTree, Playground) {
     st::QuadTree<const char*, double, 4> tree({-1, 1, 1, -1});
@@ -25,6 +25,21 @@ TEST(QuadTree, Playground) {
     ASSERT_TRUE(tree.emplace(-0.75, 0.5, "point3").second);
     ASSERT_TRUE(tree.emplace(-0.5, 0.25, "point4").second);
     ASSERT_TRUE(tree.emplace(-0.5, 0.75, "point5").second);
+    ASSERT_EQ(tree.size(), 5);
+}
 
-    std::cout << tree.size() << "\n";
+TEST(QuadTree, UniqueInsertions) {
+    static constexpr int                 TEST_SIZE = 1000;
+    st::QuadTree<int, int, 4> tree({-TEST_SIZE, TEST_SIZE, TEST_SIZE, -TEST_SIZE});
+
+    for (int i = 1; i < TEST_SIZE; ++i) {
+        ASSERT_TRUE(tree.emplace(i, i, i).second);
+        ASSERT_TRUE(tree.emplace(-i, i, i).second);
+        ASSERT_TRUE(tree.emplace(-i, -i, i).second);
+        ASSERT_TRUE(tree.emplace(i, -i, i).second);
+    }
+
+    ASSERT_EQ(tree.size(), 4 * TEST_SIZE - 4);
+    tree.clear();
+    ASSERT_TRUE(tree.empty());
 }

@@ -6,6 +6,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <numeric>
 #include <tuple>
 #include <vector>
 
@@ -13,18 +14,16 @@
 #include "helpers.hh"
 #include "intervals.hh"
 
+/// Far fetched optimization for Integer based coodinate types:
+/// Can stop recursing when h * w <= RECURSION_CUTOFF
+
 namespace st {
 template <typename StorageType, typename CoordinateType = int, uint64_t RECURSION_CUTOFF = 4>
 class QuadTree {
 public:
     using __CoordinateType = CoordinateType;
 
-    QuadTree(const BoundingBox<CoordinateType> &boundaries) : size_(0) {
-        width_ = boundaries.bottom_x - boundaries.top_x;
-        height_ = boundaries.top_y - boundaries.bottom_y;
-        origin_x_ = (boundaries.top_x + boundaries.bottom_x) / 2;
-        origin_y_ = (boundaries.top_y + boundaries.bottom_y) / 2;
-
+    QuadTree(const BoundingBox<CoordinateType> &boundaries) : boundaries_(boundaries), size_(0) {
         nodes_.resize(1);
     }
 
@@ -32,7 +31,10 @@ public:
 
     __always_inline uint64_t size() const { return size_; }
     __always_inline bool     empty() const { return size() == 0; }
-    __always_inline void     clear() { nodes_.resize(1); }
+    __always_inline void     clear() {
+        nodes_.resize(1);
+        size_ = 0;
+    }
 
     struct Iterator {
     public:
@@ -49,7 +51,9 @@ public:
         Iterator(const QuadTree<StorageType, CoordinateType> *tree) : tree_(tree) { end(); }
         ~Iterator() = default;
 
-        __always_inline auto operator*() const { return tree_->operator()(node_index_, item_index_); }
+        __always_inline auto operator*() const {
+            return tree_->operator()(node_index_, item_index_);
+        }
 
         // TODO
         Iterator &operator++();
@@ -87,8 +91,7 @@ public:
                                                       CoordinateType y,
                                                       Args &&...args) {
         /// TODO: Check that coordinates fit the global bounding box.
-        return emplace_recursively(
-            0, height_, width_, origin_x_, origin_y_, x, y, std::forward<Args>(args)...);
+        return emplace_recursively(0, boundaries_, x, y, std::forward<Args>(args)...);
     }
 
     __always_inline std::pair<Iterator, bool> insert(CoordinateType x,
@@ -150,9 +153,9 @@ private:
             NodeLeaves              leaves;
             std::array<uint64_t, 4> children;
         };
-        bool should_recurse;
+        bool is_a_branch;
 
-        __always_inline Node() : should_recurse(false) { leaves.size = 0; }
+        __always_inline Node() : is_a_branch(false) { leaves.size = 0; }
     };
 
     __always_inline std::tuple<CoordinateType, CoordinateType, const StorageType &> operator()(
@@ -160,7 +163,7 @@ private:
         assert(node_index < nodes_.size());
         const Node &node = nodes_[node_index];
 
-        assert(!node.should_recurse);
+        assert(!node.is_a_branch);
         assert(item_index < node.leaves.size);
 
         const auto &[x, y, storage] = node.leaves.items[item_index];
@@ -169,20 +172,19 @@ private:
     }
 
     /// TODO: Move to intervals.hh
-    __always_inline auto belongs_to_quadrant(CoordinateType origin_x,
-                                             CoordinateType origin_y,
-                                             CoordinateType x,
-                                             CoordinateType y) {
+    /// TODO: See if BoundingBox is sent through registers. Check what happens to perf if changed.
+    __always_inline auto belongs_to_quadrant(const BoundingBox<CoordinateType> &boundaries,
+                                             CoordinateType                     x,
+                                             CoordinateType                     y) {
+        CoordinateType origin_x = (boundaries.top_x + boundaries.bottom_x) / 2;
+        CoordinateType origin_y = (boundaries.top_y + boundaries.bottom_y) / 2;
+
         return Quadrant::NE + ((y >= origin_y) * (x < origin_x)) * Quadrant::NW +
                (y < origin_y) * ((x < origin_x) * Quadrant::SW + (x >= origin_x) * Quadrant::SE);
     }
 
-    __always_inline std::tuple<CoordinateType, CoordinateType, CoordinateType, CoordinateType>
-                    child_location(uint64_t       quad,
-                                   CoordinateType h,
-                                   CoordinateType w,
-                                   CoordinateType origin_x,
-                                   CoordinateType origin_y) {
+    __always_inline BoundingBox<CoordinateType> child_location(
+        uint64_t quad, const BoundingBox<CoordinateType> &boundaries) {
         static std::array<std::tuple<int, int>, 4> SIGNS;
         SIGNS[Quadrant::NE] = std::tuple<int, int>{1, 1};
         SIGNS[Quadrant::NW] = std::tuple<int, int>{-1, 1};
@@ -190,108 +192,94 @@ private:
         SIGNS[Quadrant::SE] = std::tuple<int, int>{1, -1};
 
         const auto [sign_x, sign_y] = SIGNS[quad];
-        return {h / 2, w / 2, origin_x + sign_x * h / 2, origin_y + sign_y * w / 2};
+
+        /// TODO: Move this logic to BoundingBox::
+        CoordinateType width = (boundaries.bottom_x - boundaries.top_x) / 2;
+        CoordinateType height = (boundaries.top_y - boundaries.bottom_y) / 2;
+
+        /// TODO: Combine this logic with belongs_to_quadrant because it must match.
+        CoordinateType top_x = boundaries.top_x + (sign_x >= 0) * width;
+        CoordinateType top_y = boundaries.top_y - (sign_y < 0) * height;
+
+        CoordinateType bottom_x = boundaries.bottom_x - (sign_x < 0) * width;
+        CoordinateType bottom_y = boundaries.bottom_y + (sign_x >= 0) * height;
+
+        return {top_x, top_y, bottom_x, bottom_y};
     }
 
     template <typename... Args>
     __always_inline std::pair<Iterator, bool> emplace_recursively_helper(
-        const std::array<uint64_t, 4> &children,
-        CoordinateType                 h,
-        CoordinateType                 w,
-        CoordinateType                 origin_x,
-        CoordinateType                 origin_y,
-        CoordinateType                 x,
-        CoordinateType                 y,
+        const std::array<uint64_t, 4>     &children,
+        const BoundingBox<CoordinateType> &boundaries,
+        CoordinateType                     x,
+        CoordinateType                     y,
         Args &&...args) {
-        assert(h || w);
+        const auto selected_quadrant = belongs_to_quadrant(boundaries, x, y);
+        const auto new_boundaries = child_location(selected_quadrant, boundaries);
 
-        const auto selected_quadrant = belongs_to_quadrant(origin_x, origin_y, x, y);
-        const auto [new_h, new_w, new_origin_x, new_origin_y] =
-            child_location(selected_quadrant, h, w, origin_x, origin_y);
-
-        return emplace_recursively(children[selected_quadrant],
-                                   new_h,
-                                   new_w,
-                                   new_origin_x,
-                                   new_origin_y,
-                                   x,
-                                   y,
-                                   std::forward<Args>(args)...);
+        return emplace_recursively(
+            children[selected_quadrant], new_boundaries, x, y, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    std::pair<Iterator, bool> emplace_recursively(uint64_t       node_index,
-                                                  CoordinateType h,
-                                                  CoordinateType w,
-                                                  CoordinateType origin_x,
-                                                  CoordinateType origin_y,
-                                                  CoordinateType x,
-                                                  CoordinateType y,
+    std::pair<Iterator, bool> emplace_recursively(uint64_t                           node_index,
+                                                  const BoundingBox<CoordinateType> &boundaries,
+                                                  CoordinateType                     x,
+                                                  CoordinateType                     y,
                                                   Args &&...args) {
         assert(node_index < nodes_.size());
 
         Node &node = nodes_[node_index];
 
-        const bool should_split = node.leaves.size == RECURSION_CUTOFF;
-        if (!node.should_recurse && !should_split) {
-            uint64_t idx;
-            bool     inserted = true;
-            // TODO: Check if can optimize by removing the break and unrolling.
-            for (idx = 0; idx < node.leaves.size; ++idx) {
-                const auto &[x_, y_, storage_] = node.leaves.items[idx];
-                if (x == x_ && y == y_) {
-                    inserted = false;
-                    break;
-                }
-            }
-
-            if (inserted) {
-                node.leaves.items[idx] = std::move(NodeContent(x, y, std::forward<Args>(args)...));
-                ++node.leaves.size;
-                ++size_;
-            }
-
-            return {Iterator(this, node_index, idx), inserted};
+        if (node.is_a_branch) {
+            return emplace_recursively_helper(
+                node.children, boundaries, x, y, std::forward<Args>(args)...);
         }
 
-        if (should_split) {
-            // Subdivide the current node.
-            std::array<uint64_t, 4> new_children;
-            for (uint64_t i = 0; i < 4; ++i) {
-                new_children[i] = nodes_.size();
-                /// FIXME: Will not work if `StorageType` does not have a default constructor.
-                nodes_.resize(nodes_.size() + 1);
-            }
-
-            /// Insert the nodes one after the other by selecting the appropriate quadrant every
-            /// time.
-
-            /// TODO: Optimization for the case where all children would be long to a deep
-            /// square. Instead, find the smallest square that would contain them all and
-            /// start inserting from there. Then, create all the parents that lead to it.
-            for (auto &entry : node.leaves.items) {
-                emplace_recursively_helper(
-                    new_children, h, w, origin_x, origin_y, entry.x, entry.y, entry.storage);
-            }
-
-            node.should_recurse = true;
-            node.children = new_children;
-            size_ -= RECURSION_CUTOFF;
+        auto beg = node.leaves.items.begin();
+        auto end = node.leaves.items.end() + node.leaves.size;
+        auto it = std::find_if(node.leaves.items.begin(), end, [&](auto entry) {
+            const auto &[x_, y_, storage_] = entry;
+            return x == x_ && y == y_;
+        });
+        if (it != end) {
+            return {Iterator(this, node_index, std::distance(beg, it)), false};
         }
+
+        const bool node_is_full = node.leaves.size == RECURSION_CUTOFF;
+        if (!node_is_full) {
+            node.leaves.items[node.leaves.size++] =
+                std::move(NodeContent(x, y, std::forward<Args>(args)...));
+            ++size_;
+            return {Iterator(this, node_index, node.leaves.size - 1), true};
+        }
+
+        // Subdivide the current node.
+        std::array<uint64_t, 4> new_children;
+        std::iota(new_children.begin(), new_children.end(), nodes_.size());
+        nodes_.resize(nodes_.size() + 4);
+
+        /// Insert the nodes one after the other by selecting the appropriate quadrant every
+        /// time.
+        /// TODO: Optimization for the case where all children would be long to a deep
+        /// square. Instead, find the smallest square that would contain them all and
+        /// start inserting from there. Then, create all the parents that lead to it.
+        Node &node_as_branch = nodes_[node_index];
+        for (auto &entry : node_as_branch.leaves.items) {
+            emplace_recursively_helper(new_children, boundaries, entry.x, entry.y, entry.storage);
+        }
+
+        node_as_branch.is_a_branch = true;
+        node_as_branch.children = new_children;
+        size_ -= RECURSION_CUTOFF;
 
         // Attempt a new insertion (could recurse again).
-        /// FIXME: Use a while loop to avoid too much recursion.
         return emplace_recursively_helper(
-            node.children, h, w, origin_x, origin_y, x, y, std::forward<Args>(args)...);
+            node_as_branch.children, boundaries, x, y, std::forward<Args>(args)...);
     }
 
-    CoordinateType height_;
-    CoordinateType width_;
-    CoordinateType origin_x_;
-    CoordinateType origin_y_;
-
-    uint64_t size_;
-
-    std::vector<Node> nodes_;
+    const BoundingBox<CoordinateType> boundaries_;
+    uint64_t                          size_;
+    std::vector<Node>                 nodes_;
 };
 }  // namespace st

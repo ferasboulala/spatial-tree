@@ -35,6 +35,15 @@ struct UnsafeAbsDiff {
 
 namespace st {
 
+template <typename T>
+T absdiff(T x, T y) {
+    if constexpr (std::is_floating_point_v<T> || std::is_signed_v<T>) {
+        return UnsafeAbsDiff<T>()(x, y);
+    } else {
+        return SafeAbsDiff<T>()(x, y);
+    }
+}
+
 template <typename T, typename... Args>
 __always_inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
     if constexpr (std::is_floating_point_v<T> || std::is_signed_v<T>) {
