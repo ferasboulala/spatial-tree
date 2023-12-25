@@ -16,16 +16,15 @@ protected:
         ASSERT_TRUE(tree.empty());
     }
 
-    void test_unique_insertions(Args &&...args) {
+    void test_unique_insertions(int test_size, Args &&...args) {
         TreeType             tree(std::forward<Args>(args)...);
-        static constexpr int TEST_SIZE = 10000;
-        for (int i = 1; i <= TEST_SIZE; ++i) {
+        for (int i = 1; i <= test_size; ++i) {
             ASSERT_TRUE(tree.emplace(i, i, i).second);
             ASSERT_TRUE(tree.emplace(i, -i, i).second);
             ASSERT_TRUE(tree.emplace(-i, i, i).second);
             ASSERT_TRUE(tree.emplace(-i, -i, i).second);
         }
-        ASSERT_EQ(tree.size(), 4 * TEST_SIZE);
+        ASSERT_EQ(tree.size(), 4 * test_size);
         tree.clear();
         ASSERT_TRUE(tree.empty());
         ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));

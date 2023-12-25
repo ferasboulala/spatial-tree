@@ -60,7 +60,7 @@ public:
 
         __always_inline bool operator==(const Iterator &other) const {
             assert(tree_ == other.tree_);
-            return node_index_ == other.index_ && item_index_ == other.item_index_;
+            return node_index_ == other.node_index_ && item_index_ == other.item_index_;
         }
 
         __always_inline bool operator!=(const Iterator &other) const { return !(*this == other); }
@@ -83,7 +83,8 @@ public:
             return end();
         }
 
-        return Iterator(this, 0);
+        // TODO
+        return end();
     }
 
     template <typename... Args>
@@ -202,7 +203,7 @@ private:
         CoordinateType top_y = boundaries.top_y - (sign_y < 0) * height;
 
         CoordinateType bottom_x = boundaries.bottom_x - (sign_x < 0) * width;
-        CoordinateType bottom_y = boundaries.bottom_y + (sign_x >= 0) * height;
+        CoordinateType bottom_y = boundaries.bottom_y + (sign_y >= 0) * height;
 
         return {top_x, top_y, bottom_x, bottom_y};
     }
@@ -236,14 +237,16 @@ private:
                 node.children, boundaries, x, y, std::forward<Args>(args)...);
         }
 
-        auto beg = node.leaves.items.begin();
-        auto end = node.leaves.items.end() + node.leaves.size;
-        auto it = std::find_if(node.leaves.items.begin(), end, [&](auto entry) {
-            const auto &[x_, y_, storage_] = entry;
-            return x == x_ && y == y_;
-        });
-        if (it != end) {
-            return {Iterator(this, node_index, std::distance(beg, it)), false};
+        if (node.leaves.size) {
+            auto beg = node.leaves.items.begin();
+            auto end = node.leaves.items.begin() + node.leaves.size;
+            auto it = std::find_if(beg, end, [&](auto& entry) {
+                const auto &[x_, y_, storage_] = entry;
+                return x == x_ && y == y_;
+            });
+            if (it != end) {
+                return {Iterator(this, node_index, std::distance(beg, it)), false};
+            }
         }
 
         const bool node_is_full = node.leaves.size == RECURSION_CUTOFF;
