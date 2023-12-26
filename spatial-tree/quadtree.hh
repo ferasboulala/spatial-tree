@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdint>
 #include <functional>
+#include <iostream>
 #include <limits>
 #include <numeric>
 #include <tuple>
@@ -24,6 +25,7 @@ public:
 
     using __CoordinateType = CoordinateType;
 
+    /// With -inf, +inf, watch out for overflow/underflow
     QuadTree(const BoundingBox<CoordinateType> &boundaries) : boundaries_(boundaries) { clear(); }
 
     ~QuadTree() = default;
@@ -139,11 +141,15 @@ public:
 
     // TODO
     __always_inline void find(const BoundingBox<CoordinateType> &bbox,
-                              std::function<void(Iterator)>      func) const;
+                              std::function<void(Iterator)>      func) const {
+        if (!empty()) {
+            find_recursively(bbox, boundaries_, func, 0);
+        }
+    }
 
     Iterator find(CoordinateType x, CoordinateType y) const {
         Iterator it = end();
-        /// Can be faster by checking a point.
+        /// Can be faster by checking a point because there are no bounding boxes.
         find({x, y, x, y}, [&](Iterator found) { it = found; });
 
         return it;
@@ -230,10 +236,10 @@ private:
 
         /// TODO: Combine this logic with belongs_to_quadrant because it must match.
         CoordinateType top_x = boundaries.top_x + fx * new_width;
-        CoordinateType top_y = boundaries.top_y - (1 - fy) * new_height;
+        CoordinateType top_y = boundaries.top_y - (1 - fy) * (new_height + height_remainder);
 
         CoordinateType bottom_x = boundaries.bottom_x - (1 - fx) * (new_width + width_remainder);
-        CoordinateType bottom_y = boundaries.bottom_y + fy * (new_height + height_remainder);
+        CoordinateType bottom_y = boundaries.bottom_y + fy * new_height;
 
         return {top_x, top_y, bottom_x, bottom_y};
     }
@@ -259,6 +265,7 @@ private:
                                                   CoordinateType                     y,
                                                   Args &&...args) {
         assert(node_index < nodes_.size());
+        assert(is_inside_bounding_box(x, y, boundaries));
 
         Node &node = nodes_[node_index];
 
@@ -270,6 +277,7 @@ private:
         if (node.leaves.size) {
             auto beg = node.leaves.items.begin();
             auto end = node.leaves.items.begin() + node.leaves.size;
+            /// TODO: Parallelize this by checking on all children.
             auto it = std::find_if(beg, end, [&](auto &entry) {
                 const auto &[x_, y_, storage_] = entry;
                 return x == x_ && y == y_;
@@ -292,13 +300,13 @@ private:
         std::iota(new_children.begin(), new_children.end(), nodes_.size());
         nodes_.resize(nodes_.size() + 4);
 
-        /// Insert the nodes one after the other by selecting the appropriate quadrant every
+        /// Insert the items one after the other by selecting the appropriate quadrant every
         /// time.
         /// TODO: Optimization for the case where all children would be long to a deep
         /// square. Instead, find the smallest square that would contain them all and
         /// start inserting from there. Then, create all the parents that lead to it.
         Node &node_as_branch = nodes_[node_index];
-        for (auto &entry : node_as_branch.leaves.items) {
+        for (const auto &entry : node_as_branch.leaves.items) {
             emplace_recursively_helper(new_children, boundaries, entry.x, entry.y, entry.storage);
         }
 
@@ -309,6 +317,44 @@ private:
         // Attempt a new insertion (could recurse again).
         return emplace_recursively_helper(
             new_children, boundaries, x, y, std::forward<Args>(args)...);
+    }
+
+    void find_recursively(const BoundingBox<CoordinateType> &bbox,
+                          const BoundingBox<CoordinateType> &boundaries,
+                          std::function<void(Iterator)>      func,
+                          uint64_t                           node_index) const {
+        assert(node_index < nodes_.size());
+
+        const Node &node = nodes_[node_index];
+        if (!bounding_boxes_overlap(bbox, boundaries)) {
+            return;
+        }
+
+        if (!node.is_a_branch) {
+            for (uint64_t i = 0; i < node.leaves.size; ++i) {
+                if (is_inside_bounding_box(node.leaves.items[i].x, node.leaves.items[i].y, bbox)) {
+                    func(Iterator(this, node_index, i));
+                }
+            }
+            return;
+        }
+
+        find_recursively(bbox,
+                         compute_new_boundaries(Quadrant::NE, boundaries),
+                         func,
+                         node.children[Quadrant::NE]);
+        find_recursively(bbox,
+                         compute_new_boundaries(Quadrant::NW, boundaries),
+                         func,
+                         node.children[Quadrant::NW]);
+        find_recursively(bbox,
+                         compute_new_boundaries(Quadrant::SW, boundaries),
+                         func,
+                         node.children[Quadrant::SW]);
+        find_recursively(bbox,
+                         compute_new_boundaries(Quadrant::SE, boundaries),
+                         func,
+                         node.children[Quadrant::SE]);
     }
 
     const BoundingBox<CoordinateType> boundaries_;
