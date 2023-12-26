@@ -9,6 +9,8 @@
 
 #include "test/fixture.hh"
 
+/// TODO: Try rectangular domains.
+/// TODO: Better error messages.
 TEST(TestQuadTree, UniqueInsertions) {
     const std::vector<int> test_sizes = {1000, 10000, 12345, 13, 256, 2048, 5, 999};
     for (int test_size : test_sizes) {
@@ -30,23 +32,22 @@ TEST(TestQuadTree, RandomInsertions) {
     const std::vector<int> test_sizes = {1000, 10000, 12345, 13, 256, 2048, 5, 999};
     for (int test_size : test_sizes) {
         const auto test = [&]<typename CoordT>() {
-            static constexpr CoordT DISTRIBUTION_BEG = 0;
-            static constexpr CoordT DISTRIBUTION_END = 1000;
-            static_assert((DISTRIBUTION_END - DISTRIBUTION_BEG + 1) *
-                              (DISTRIBUTION_END - DISTRIBUTION_BEG + 1) <=
-                          std::numeric_limits<CoordT>::max());
+            static constexpr int DISTRIBUTION_BEG = 1;
+            static constexpr int DISTRIBUTION_END = 10000;
+            static constexpr int RANGE_SIZE = DISTRIBUTION_END - DISTRIBUTION_BEG + 1;
+            static_assert(RANGE_SIZE * RANGE_SIZE <= std::numeric_limits<int>::max());
 
             st::QuadTree<int, CoordT> tree(
                 {DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG});
             std::random_device            device;
             std::uniform_int_distribution distribution(static_cast<int>(DISTRIBUTION_BEG),
                                                        static_cast<int>(DISTRIBUTION_END));
-            std::unordered_set<int>       added_points;
+            std::unordered_set<int>    added_points;
             for (int i = 0; i < test_size; ++i) {
-                const CoordT x = distribution(device);
-                const CoordT y = distribution(device);
+                const int x = distribution(device);
+                const int y = distribution(device);
                 const bool   was_inserted_in_tree = tree.emplace(x, y, i).second;
-                const CoordT unique_hash = x + (DISTRIBUTION_END - DISTRIBUTION_BEG + 1) * y;
+                const int64_t unique_hash = x + RANGE_SIZE * y;
                 const bool   was_inserted_in_map = added_points.insert(unique_hash).second;
                 ASSERT_EQ(was_inserted_in_map, was_inserted_in_tree);
             }
@@ -55,6 +56,7 @@ TEST(TestQuadTree, RandomInsertions) {
             ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
         };
 
+        /// TODO: Proper floating point tests.
         test.operator()<float>();
         test.operator()<double>();
         test.operator()<int>();

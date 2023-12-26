@@ -14,13 +14,13 @@
 #include "intervals.hh"
 
 /// Far fetched optimization for Integer based coodinate types:
-/// Can stop recursing when h * w <= RECURSION_CUTOFF
+/// Can stop recursing when h * w <= MAXIMUM_NODE_SIZE
 
 namespace st {
-template <typename StorageType, typename CoordinateType = int, uint8_t RECURSION_CUTOFF = 4>
+template <typename StorageType, typename CoordinateType = int, uint8_t MAXIMUM_NODE_SIZE = 4>
 class QuadTree {
 public:
-    static_assert(RECURSION_CUTOFF < 255);
+    static_assert(MAXIMUM_NODE_SIZE < 255);
 
     using __CoordinateType = CoordinateType;
 
@@ -57,7 +57,7 @@ public:
 
         // TODO
         Iterator &operator++() {
-            assert(node_index != NO_INDEX);
+            assert(node_index_ != NO_INDEX);
 
             const Node *node = &tree_->nodes_[node_index_];
             if (!node->is_a_branch && ++item_index_ < node->leaves.size) {
@@ -170,8 +170,8 @@ private:
     };
 
     struct NodeLeaves {
-        std::array<NodeContent, RECURSION_CUTOFF> items;
-        uint8_t                                   size;
+        std::array<NodeContent, MAXIMUM_NODE_SIZE> items;
+        uint8_t                                    size;
     };
 
     struct Node {
@@ -199,36 +199,41 @@ private:
 
     /// TODO: Move to intervals.hh
     /// TODO: See if BoundingBox is sent through registers. Check what happens to perf if changed.
-    __always_inline auto belongs_to_quadrant(const BoundingBox<CoordinateType> &boundaries,
-                                             CoordinateType                     x,
-                                             CoordinateType                     y) {
+    static __always_inline auto belongs_to_quadrant(const BoundingBox<CoordinateType> &boundaries,
+                                                    CoordinateType                     x,
+                                                    CoordinateType                     y) {
         CoordinateType origin_x = (boundaries.top_x + boundaries.bottom_x) / 2;
         CoordinateType origin_y = (boundaries.top_y + boundaries.bottom_y) / 2;
 
         return Quadrant::NE + ((y >= origin_y) * (x < origin_x)) * Quadrant::NW +
-               (y < origin_y) * ((x < origin_x) * Quadrant::SW + (x >= origin_x) * Quadrant::SE);
+               (y < origin_y) * ((x < origin_x) * Quadrant::SW +
+                                 (y < origin_y) * (x >= origin_x) * Quadrant::SE);
     }
 
-    __always_inline BoundingBox<CoordinateType> child_location(
+    static __always_inline BoundingBox<CoordinateType> compute_new_boundaries(
         uint64_t quad, const BoundingBox<CoordinateType> &boundaries) {
-        static std::array<std::tuple<int, int>, 4> SIGNS;
-        SIGNS[Quadrant::NE] = std::tuple<int, int>{1, 1};
-        SIGNS[Quadrant::NW] = std::tuple<int, int>{-1, 1};
-        SIGNS[Quadrant::SW] = std::tuple<int, int>{-1, -1};
-        SIGNS[Quadrant::SE] = std::tuple<int, int>{1, -1};
+        static std::array<std::tuple<bool, bool>, 4> factors;
+        factors[Quadrant::NE] = std::tuple<bool, bool>{1, 1};
+        factors[Quadrant::NW] = std::tuple<bool, bool>{0, 1};
+        factors[Quadrant::SW] = std::tuple<bool, bool>{0, 0};
+        factors[Quadrant::SE] = std::tuple<bool, bool>{1, 0};
 
-        const auto [sign_x, sign_y] = SIGNS[quad];
+        const auto [fx, fy] = factors[quad];
 
         /// TODO: Move this logic to BoundingBox::
-        CoordinateType width = (boundaries.bottom_x - boundaries.top_x) / 2;
-        CoordinateType height = (boundaries.top_y - boundaries.bottom_y) / 2;
+        CoordinateType width = (boundaries.bottom_x - boundaries.top_x);
+        CoordinateType height = (boundaries.top_y - boundaries.bottom_y);
+        CoordinateType new_width = width / 2;
+        CoordinateType new_height = height / 2;
+        CoordinateType width_remainder = width - 2 * new_width;
+        CoordinateType height_remainder = height - 2 * new_height;
 
         /// TODO: Combine this logic with belongs_to_quadrant because it must match.
-        CoordinateType top_x = boundaries.top_x + (sign_x >= 0) * width;
-        CoordinateType top_y = boundaries.top_y - (sign_y < 0) * height;
+        CoordinateType top_x = boundaries.top_x + fx * new_width;
+        CoordinateType top_y = boundaries.top_y - (1 - fy) * new_height;
 
-        CoordinateType bottom_x = boundaries.bottom_x - (sign_x < 0) * width;
-        CoordinateType bottom_y = boundaries.bottom_y + (sign_y >= 0) * height;
+        CoordinateType bottom_x = boundaries.bottom_x - (1 - fx) * (new_width + width_remainder);
+        CoordinateType bottom_y = boundaries.bottom_y + fy * (new_height + height_remainder);
 
         return {top_x, top_y, bottom_x, bottom_y};
     }
@@ -241,7 +246,7 @@ private:
         CoordinateType                     y,
         Args &&...args) {
         const auto selected_quadrant = belongs_to_quadrant(boundaries, x, y);
-        const auto new_boundaries = child_location(selected_quadrant, boundaries);
+        const auto new_boundaries = compute_new_boundaries(selected_quadrant, boundaries);
 
         return emplace_recursively(
             children[selected_quadrant], new_boundaries, x, y, std::forward<Args>(args)...);
@@ -274,7 +279,7 @@ private:
             }
         }
 
-        const bool node_is_full = node.leaves.size == RECURSION_CUTOFF;
+        const bool node_is_full = node.leaves.size == MAXIMUM_NODE_SIZE;
         if (!node_is_full) {
             node.leaves.items[node.leaves.size++] =
                 std::move(NodeContent(x, y, std::forward<Args>(args)...));
@@ -299,11 +304,11 @@ private:
 
         node_as_branch.is_a_branch = true;
         node_as_branch.children = new_children;
-        size_ -= RECURSION_CUTOFF;
+        size_ -= MAXIMUM_NODE_SIZE;
 
         // Attempt a new insertion (could recurse again).
         return emplace_recursively_helper(
-            node_as_branch.children, boundaries, x, y, std::forward<Args>(args)...);
+            new_children, boundaries, x, y, std::forward<Args>(args)...);
     }
 
     const BoundingBox<CoordinateType> boundaries_;

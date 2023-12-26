@@ -16,10 +16,10 @@
 namespace st {
 
 template <typename StorageType, typename CoordinateType = int>
-class QuadTree {
+class KDTree4 {
 public:
-    QuadTree() = default;
-    ~QuadTree() = default;
+    KDTree4() = default;
+    ~KDTree4() = default;
 
     __always_inline void     reserve(uint64_t size) { nodes_.reserve(size); }
     __always_inline uint64_t capacity() const { return nodes_.capacity(); }

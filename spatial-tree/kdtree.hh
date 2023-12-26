@@ -232,6 +232,7 @@ private:
         }
     }
 
+    /// TODO: Make it stack overflow -> convert to loop + stack -> compare perf.
     void nearest_recursive(uint64_t                             node_index,
                            const std::array<CoordinateType, 2> &xy,
                            CoordinateType                      &nearest_distance_squared,
