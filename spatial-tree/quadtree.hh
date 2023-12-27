@@ -14,18 +14,13 @@
 #include "helpers.hh"
 #include "intervals.hh"
 
-/// Far fetched optimization for Integer based coodinate types:
-/// Can stop recursing when h * w <= MAXIMUM_NODE_SIZE
-
 namespace st {
 template <typename StorageType, typename CoordinateType = int, uint8_t MAXIMUM_NODE_SIZE = 4>
 class QuadTree {
 public:
-    static_assert(MAXIMUM_NODE_SIZE < 255);
+    static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
 
-    using __CoordinateType = CoordinateType;
-
-    /// With -inf, +inf, watch out for overflow/underflow
+    QuadTree() : boundaries_() { clear(); }
     QuadTree(const BoundingBox<CoordinateType> &boundaries) : boundaries_(boundaries) { clear(); }
 
     ~QuadTree() = default;
@@ -57,12 +52,12 @@ public:
             return tree_->operator()(node_index_, item_index_);
         }
 
-        // TODO
         Iterator &operator++() {
-            assert(node_index_ != NO_INDEX);
+            assert(node_index_ != Node::NO_INDEX);
+            assert(node_index < tree->nodes_.size());
 
             const Node *node = &tree_->nodes_[node_index_];
-            if (!node->is_a_branch && ++item_index_ < node->leaves.size) {
+            if (node->is_a_leaf() && ++item_index_ < node->leaves.size) {
                 return *this;
             }
 
@@ -70,8 +65,7 @@ public:
                 ++node_index_;
                 node = &tree_->nodes_[node_index_];
                 item_index_ = 0;
-                /// TODO: Add a Node::empty function to use here.
-            } while ((node->is_a_branch || !node->leaves.size) &&
+            } while ((node->is_a_branch() || !node->leaves.size) &&
                      node_index_ < tree_->nodes_.size());
 
             if (node_index_ == tree_->nodes_.size()) end();
@@ -88,7 +82,7 @@ public:
 
     private:
         __always_inline void end() {
-            node_index_ = NO_INDEX;
+            node_index_ = Node::NO_INDEX;
             item_index_ = 0;
         }
 
@@ -98,20 +92,15 @@ public:
         uint8_t  item_index_;
     };
 
-    // TODO
-    void walk(const std::function<void(Iterator)> func) const;
-
     __always_inline Iterator end() const { return Iterator(this); }
     __always_inline Iterator begin() const {
         if (empty()) {
             return end();
         }
 
-        Iterator ret(this, 0, 0);
-
+        Iterator    ret(this, 0, 0);
         const Node &first_node = nodes_.front();
-
-        if (!first_node.is_a_branch && first_node.leaves.size) return ret;
+        if (first_node.is_a_leaf() && first_node.leaves.size) return ret;
 
         return ++ret;
     }
@@ -120,7 +109,8 @@ public:
     __always_inline std::pair<Iterator, bool> emplace(CoordinateType x,
                                                       CoordinateType y,
                                                       Args &&...args) {
-        /// TODO: Check that coordinates fit the global bounding box.
+        assert(is_inside_bounding_box(x, y, boundaries_));
+
         return emplace_recursively(0, boundaries_, x, y, std::forward<Args>(args)...);
     }
 
@@ -136,22 +126,22 @@ public:
         return emplace(x, y, storage);
     }
 
-    // TODO
     std::vector<Iterator> nearest(CoordinateType x, CoordinateType y) const {
-        CoordinateType nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
+        CoordinateType        nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
         std::vector<Iterator> results;
         nearest_recursively(0, boundaries_, x, y, nearest_distance_squared, results);
 
         return results;
     }
 
-    // TODO
     __always_inline void find(const BoundingBox<CoordinateType> &bbox,
                               std::function<void(Iterator)>      func) const {
         find_recursively(bbox, boundaries_, func, 0);
     }
 
     Iterator find(CoordinateType x, CoordinateType y) const {
+        assert(is_inside_bounding_box(x, y, boundaries_));
+
         Iterator it = end();
         /// Can be faster by checking a point because there are no bounding boxes.
         find({x, y, x, y}, [&](Iterator found) { it = found; });
@@ -160,16 +150,11 @@ public:
     }
 
 private:
-    static constexpr uint64_t NO_INDEX = std::numeric_limits<uint64_t>::max();
-    // This is the equivalent of a namespace. Can't use a class enum because it does not let me
-    // index into arrays.
     struct Quadrant {
         enum _Quadrant { NE = 0, NW = 1, SW = 2, SE = 3 };
     };
 
     struct NodeContent {
-        // TODO: Check if having two arrays, one for coordinates and one for storage would improve
-        // performance when manipulating coordinates.
         CoordinateType x;
         CoordinateType y;
         StorageType    storage;
@@ -185,13 +170,16 @@ private:
     };
 
     struct Node {
+        static constexpr uint64_t NO_INDEX = std::numeric_limits<uint64_t>::max();
         union {
             NodeLeaves              leaves;
             std::array<uint64_t, 4> children;
         };
-        bool is_a_branch;
+        bool branch;
 
-        __always_inline Node() : is_a_branch(false) { leaves.size = 0; }
+        __always_inline      Node() : branch(false) { leaves.size = 0; }
+        __always_inline bool is_a_branch() const { return branch; }
+        __always_inline bool is_a_leaf() const { return !is_a_branch(); }
     };
 
     __always_inline std::tuple<CoordinateType, CoordinateType, const StorageType &> operator()(
@@ -199,7 +187,7 @@ private:
         assert(node_index < nodes_.size());
         const Node &node = nodes_[node_index];
 
-        assert(!node.is_a_branch);
+        assert(node.is_a_leaf());
         assert(item_index < node.leaves.size);
 
         const auto &[x, y, storage] = node.leaves.items[item_index];
@@ -207,13 +195,14 @@ private:
         return std::tuple<CoordinateType, CoordinateType, const StorageType &>(x, y, storage);
     }
 
-    /// TODO: Move to intervals.hh
-    /// TODO: See if BoundingBox is sent through registers. Check what happens to perf if changed.
     static __always_inline auto belongs_to_quadrant(const BoundingBox<CoordinateType> &boundaries,
                                                     CoordinateType                     x,
                                                     CoordinateType                     y) {
-        CoordinateType origin_x = (boundaries.top_x + boundaries.bottom_x) / 2;
-        CoordinateType origin_y = (boundaries.top_y + boundaries.bottom_y) / 2;
+        assert(is_inside_bounding_box(x, y, boundaries));
+
+        CoordinateType origin_x = (boundaries.bottom_x - boundaries.top_x) / 2 + boundaries.top_x;
+        CoordinateType origin_y =
+            (boundaries.top_y - boundaries.bottom_y) / 2 + boundaries.bottom_y;
 
         return Quadrant::NE + ((y >= origin_y) * (x < origin_x)) * Quadrant::NW +
                (y < origin_y) * ((x < origin_x) * Quadrant::SW +
@@ -227,21 +216,16 @@ private:
         factors[Quadrant::NW] = std::tuple<bool, bool>{0, 1};
         factors[Quadrant::SW] = std::tuple<bool, bool>{0, 0};
         factors[Quadrant::SE] = std::tuple<bool, bool>{1, 0};
-
         const auto [fx, fy] = factors[quad];
 
-        /// TODO: Move this logic to BoundingBox::
         CoordinateType width = (boundaries.bottom_x - boundaries.top_x);
         CoordinateType height = (boundaries.top_y - boundaries.bottom_y);
         CoordinateType new_width = width / 2;
         CoordinateType new_height = height / 2;
         CoordinateType width_remainder = width - 2 * new_width;
         CoordinateType height_remainder = height - 2 * new_height;
-
-        /// TODO: Combine this logic with belongs_to_quadrant because it must match.
         CoordinateType top_x = boundaries.top_x + fx * new_width;
         CoordinateType top_y = boundaries.top_y - (1 - fy) * (new_height + height_remainder);
-
         CoordinateType bottom_x = boundaries.bottom_x - (1 - fx) * (new_width + width_remainder);
         CoordinateType bottom_y = boundaries.bottom_y + fy * new_height;
 
@@ -273,7 +257,7 @@ private:
 
         Node &node = nodes_[node_index];
 
-        if (node.is_a_branch) {
+        if (node.is_a_branch()) {
             return emplace_recursively_helper(
                 node.children, boundaries, x, y, std::forward<Args>(args)...);
         }
@@ -281,7 +265,6 @@ private:
         if (node.leaves.size) {
             auto beg = node.leaves.items.begin();
             auto end = node.leaves.items.begin() + node.leaves.size;
-            /// TODO: Parallelize this by checking on all children.
             auto it = std::find_if(beg, end, [&](auto &entry) {
                 const auto &[x_, y_, storage_] = entry;
                 return x == x_ && y == y_;
@@ -299,26 +282,19 @@ private:
             return {Iterator(this, node_index, node.leaves.size - 1), true};
         }
 
-        // Subdivide the current node.
         std::array<uint64_t, 4> new_children;
         std::iota(new_children.begin(), new_children.end(), nodes_.size());
         nodes_.resize(nodes_.size() + 4);
 
-        /// Insert the items one after the other by selecting the appropriate quadrant every
-        /// time.
-        /// TODO: Optimization for the case where all children would be long to a deep
-        /// square. Instead, find the smallest square that would contain them all and
-        /// start inserting from there. Then, create all the parents that lead to it.
         Node &node_as_branch = nodes_[node_index];
         for (const auto &entry : node_as_branch.leaves.items) {
             emplace_recursively_helper(new_children, boundaries, entry.x, entry.y, entry.storage);
         }
 
-        node_as_branch.is_a_branch = true;
+        node_as_branch.branch = true;
         node_as_branch.children = new_children;
         size_ -= MAXIMUM_NODE_SIZE;
 
-        // Attempt a new insertion (could recurse again).
         return emplace_recursively_helper(
             new_children, boundaries, x, y, std::forward<Args>(args)...);
     }
@@ -334,8 +310,7 @@ private:
             return;
         }
 
-        /// TODO: Make this a function to be able to do is_a_leaf().
-        if (!node.is_a_branch) {
+        if (node.is_a_leaf()) {
             for (uint64_t i = 0; i < node.leaves.size; ++i) {
                 if (is_inside_bounding_box(node.leaves.items[i].x, node.leaves.items[i].y, bbox)) {
                     func(Iterator(this, node_index, i));
@@ -382,7 +357,7 @@ private:
 
         const Node &node = nodes_[node_index];
 
-        if (!node.is_a_branch) {
+        if (node.is_a_leaf()) {
             for (uint64_t i = 0; i < node.leaves.size; ++i) {
                 auto distance = euclidean_distance_squared(
                     x, node.leaves.items[i].x, y, node.leaves.items[i].y);
@@ -397,8 +372,6 @@ private:
             return;
         }
 
-        // For each quadrant, find the bounding box.
-        // For each quadrant, evaluate where the closest point may be by checking intervals.
         std::array<CoordinateType, 4>              lower_bounds;
         std::array<BoundingBox<CoordinateType>, 4> quadrant_boundaries;
         for (uint64_t i = 0; i < 4; ++i) {

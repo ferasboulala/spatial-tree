@@ -199,18 +199,18 @@ private:
                                             std::numeric_limits<CoordinateType>::max(),
                                             std::numeric_limits<CoordinateType>::max(),
                                             y),
-                BoundingBox<CoordinateType>(std::numeric_limits<CoordinateType>::min(),
+                BoundingBox<CoordinateType>(std::numeric_limits<CoordinateType>::lowest(),
                                             std::numeric_limits<CoordinateType>::max(),
                                             x,
                                             y),
-                BoundingBox<CoordinateType>(std::numeric_limits<CoordinateType>::min(),
+                BoundingBox<CoordinateType>(std::numeric_limits<CoordinateType>::lowest(),
                                             y,
                                             x,
-                                            std::numeric_limits<CoordinateType>::min()),
+                                            std::numeric_limits<CoordinateType>::lowest()),
                 BoundingBox<CoordinateType>(x,
                                             y,
                                             std::numeric_limits<CoordinateType>::max(),
-                                            std::numeric_limits<CoordinateType>::min())};
+                                            std::numeric_limits<CoordinateType>::lowest())};
     }
 
     void find_recursively(

@@ -8,10 +8,10 @@ template <typename CoordinateType>
 struct BoundingBox {
     CoordinateType  top_x, top_y, bottom_x, bottom_y;
     __always_inline BoundingBox()
-        : top_x(std::numeric_limits<CoordinateType>::min()),
+        : top_x(std::numeric_limits<CoordinateType>::lowest()),
           top_y(std::numeric_limits<CoordinateType>::max()),
           bottom_x(std::numeric_limits<CoordinateType>::max()),
-          bottom_y(std::numeric_limits<CoordinateType>::min()) {
+          bottom_y(std::numeric_limits<CoordinateType>::lowest()) {
         assert(top_x <= bottom_x);
         assert(top_y >= bottom_y);
     }
