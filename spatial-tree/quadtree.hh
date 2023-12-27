@@ -137,14 +137,18 @@ public:
     }
 
     // TODO
-    std::vector<Iterator> nearest(CoordinateType x, CoordinateType y) const;
+    std::vector<Iterator> nearest(CoordinateType x, CoordinateType y) const {
+        CoordinateType nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
+        std::vector<Iterator> results;
+        nearest_recursively(0, boundaries_, x, y, nearest_distance_squared, results);
+
+        return results;
+    }
 
     // TODO
     __always_inline void find(const BoundingBox<CoordinateType> &bbox,
                               std::function<void(Iterator)>      func) const {
-        if (!empty()) {
-            find_recursively(bbox, boundaries_, func, 0);
-        }
+        find_recursively(bbox, boundaries_, func, 0);
     }
 
     Iterator find(CoordinateType x, CoordinateType y) const {
@@ -330,6 +334,7 @@ private:
             return;
         }
 
+        /// TODO: Make this a function to be able to do is_a_leaf().
         if (!node.is_a_branch) {
             for (uint64_t i = 0; i < node.leaves.size; ++i) {
                 if (is_inside_bounding_box(node.leaves.items[i].x, node.leaves.items[i].y, bbox)) {
@@ -355,6 +360,68 @@ private:
                          compute_new_boundaries(Quadrant::SE, boundaries),
                          func,
                          node.children[Quadrant::SE]);
+    }
+
+    static __always_inline CoordinateType smallest_distance_from_bounding_box(
+        const BoundingBox<CoordinateType> &bbox, CoordinateType x, CoordinateType y) {
+        CoordinateType up = (y > bbox.top_y) * (y - bbox.top_y);
+        CoordinateType down = (y < bbox.bottom_y) * (bbox.bottom_y - y);
+        CoordinateType left = (x < bbox.top_x) * (bbox.top_x - x);
+        CoordinateType right = (x > bbox.bottom_x) * (x - bbox.bottom_x);
+
+        return up * up + down * down + left * left + right * right;
+    }
+
+    void nearest_recursively(uint64_t                           node_index,
+                             const BoundingBox<CoordinateType> &boundaries,
+                             CoordinateType                     x,
+                             CoordinateType                     y,
+                             CoordinateType                    &nearest_distance_squared,
+                             std::vector<Iterator>             &results) const {
+        assert(node_index < nodes_.size());
+
+        const Node &node = nodes_[node_index];
+
+        if (!node.is_a_branch) {
+            for (uint64_t i = 0; i < node.leaves.size; ++i) {
+                auto distance = euclidean_distance_squared(
+                    x, node.leaves.items[i].x, y, node.leaves.items[i].y);
+                if (distance < nearest_distance_squared) {
+                    results.clear();
+                    nearest_distance_squared = distance;
+                }
+                if (distance <= nearest_distance_squared) {
+                    results.emplace_back(this, node_index, i);
+                }
+            }
+            return;
+        }
+
+        // For each quadrant, find the bounding box.
+        // For each quadrant, evaluate where the closest point may be by checking intervals.
+        std::array<CoordinateType, 4>              lower_bounds;
+        std::array<BoundingBox<CoordinateType>, 4> quadrant_boundaries;
+        for (uint64_t i = 0; i < 4; ++i) {
+            quadrant_boundaries[i] = compute_new_boundaries(i, boundaries);
+            lower_bounds[i] = smallest_distance_from_bounding_box(quadrant_boundaries[i], x, y);
+        }
+
+        std::array<int, 4> ordered_quadrants;
+        std::iota(ordered_quadrants.begin(), ordered_quadrants.end(), 0);
+        std::sort(ordered_quadrants.begin(), ordered_quadrants.end(), [&](auto lhs, auto rhs) {
+            return lower_bounds[lhs] < lower_bounds[rhs];
+        });
+
+        for (auto quad : ordered_quadrants) {
+            if (lower_bounds[quad] <= nearest_distance_squared) {
+                nearest_recursively(node.children[quad],
+                                    quadrant_boundaries[quad],
+                                    x,
+                                    y,
+                                    nearest_distance_squared,
+                                    results);
+            }
+        }
     }
 
     const BoundingBox<CoordinateType> boundaries_;

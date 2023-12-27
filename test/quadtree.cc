@@ -152,50 +152,55 @@ TEST(TestQuadTree, BBoxFind) {
     test.operator()<unsigned>();
 }
 
-// TEST(TestQuadTree, Nearest) {
-//     using CoordT = int;
-//     if constexpr (!std::is_integral_v<CoordT>) {
-//         GTEST_SKIP();
-//     } else {
-//         static constexpr int    TEST_SIZE = 10000;
-//         static constexpr CoordT DISTRIBUTION_BEG = -100;
-//         static constexpr CoordT DISTRIBUTION_END = 100;
-//         static_assert((DISTRIBUTION_END - DISTRIBUTION_BEG + 1) *
-//                           (DISTRIBUTION_END - DISTRIBUTION_BEG + 1) <=
-//                       std::numeric_limits<CoordT>::max());
+TEST(TestQuadTree, Nearest) {
+    const std::vector<int> test_sizes = {1000, 10000, 12345, 13, 256, 2048, 5, 999};
+    const auto             test = [&]<typename CoordT>() {
+        for (int test_size : test_sizes) {
+            static constexpr int DISTRIBUTION_BEG = 1;
+            static constexpr int DISTRIBUTION_END = 10000;
+            static constexpr int RANGE_SIZE = DISTRIBUTION_END - DISTRIBUTION_BEG + 1;
+            static_assert(RANGE_SIZE * RANGE_SIZE <= std::numeric_limits<int>::max());
 
-//         st::QuadTree<int, CoordT> tree(
-//             {DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG});
-//         ASSERT_TRUE(tree.nearest(0, 0).empty());
+            st::QuadTree<int, CoordT> tree(
+                {DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG});
+            std::random_device            device;
+            std::uniform_int_distribution distribution(static_cast<int>(DISTRIBUTION_BEG),
+                                                       static_cast<int>(DISTRIBUTION_END));
+            std::unordered_set<int>       added_points;
+            for (int i = 0; i < test_size; ++i) {
+                const int x = distribution(device);
+                const int y = distribution(device);
+                tree.emplace(x, y, i);
 
-//         std::random_device            device;
-//         std::uniform_int_distribution distribution(DISTRIBUTION_BEG, DISTRIBUTION_END);
-//         for (int i = 0; i < TEST_SIZE; ++i) {
-//             const CoordT x = distribution(device);
-//             const CoordT y = distribution(device);
-//             tree.emplace(x, y, i);
+                const CoordT x_ = distribution(device);
+                const CoordT y_ = distribution(device);
 
-//             const CoordT x_ = distribution(device);
-//             const CoordT y_ = distribution(device);
+                const auto [nearest_x1, nearest_y1, nearest_val1] =
+                    *std::min_element(tree.begin(), tree.end(), [&](auto lhs, auto rhs) {
+                        const auto [x1, y1, val1] = lhs;
+                        const auto [x2, y2, val2] = rhs;
 
-//             const auto [nearest_x1, nearest_y1, nearest_val1] =
-//                 *std::min_element(tree.begin(), tree.end(), [&](auto lhs, auto rhs) {
-//                     const auto [x1, y1, val1] = lhs;
-//                     const auto [x2, y2, val2] = rhs;
+                        return st::euclidean_distance_squared(x1, x_, y1, y_) <
+                               st::euclidean_distance_squared(x2, x_, y2, y_);
+                    });
+                const CoordT distance1 =
+                    st::euclidean_distance_squared(x_, nearest_x1, y_, nearest_y1);
 
-//                     return st::euclidean_distance_squared(x1, x_, y1, y_) <
-//                            st::euclidean_distance_squared(x2, x_, y2, y_);
-//                 });
-//             const CoordT distance1 = st::euclidean_distance_squared(x_, nearest_x1, y_,
-//             nearest_y1);
+                // TODO: Check that it found them all.
+                const auto nearest_points = tree.nearest(x_, y_);
+                ASSERT_TRUE(std::all_of(nearest_points.begin(), nearest_points.end(), [&](auto it) {
+                    const auto [nearest_x2, nearest_y2, nearest_val2] = *it;
+                    const CoordT distance2 =
+                        st::euclidean_distance_squared(x_, nearest_x2, y_, nearest_y2);
+                    return distance2 == distance1;
+                }));
+            }
+        }
+    };
 
-//             const auto nearest_points = tree.nearest(x_, y_);
-//             ASSERT_TRUE(std::all_of(nearest_points.begin(), nearest_points.end(), [&](auto it) {
-//                 const auto [nearest_x2, nearest_y2, nearest_val2] = *it;
-//                 const CoordT distance2 =
-//                     st::euclidean_distance_squared(x_, nearest_x2, y_, nearest_y2);
-//                 return distance2 == distance1;
-//             }));
-//         }
-//     }
-// }
+    /// TODO: Proper floating point tests.
+    test.operator()<float>();
+    test.operator()<double>();
+    test.operator()<int>();
+    test.operator()<unsigned>();
+}
