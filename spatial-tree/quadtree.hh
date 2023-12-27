@@ -20,7 +20,13 @@ class QuadTree {
 public:
     static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
 
-    QuadTree() : boundaries_() { clear(); }
+    QuadTree()
+        : boundaries_(std::numeric_limits<CoordinateType>::lowest() / 2,
+                      std::numeric_limits<CoordinateType>::max() / 2,
+                      std::numeric_limits<CoordinateType>::max() / 2,
+                      std::numeric_limits<CoordinateType>::lowest() / 2) {
+        clear();
+    }
     QuadTree(const BoundingBox<CoordinateType> &boundaries) : boundaries_(boundaries) { clear(); }
 
     ~QuadTree() = default;
@@ -29,7 +35,7 @@ public:
     __always_inline bool     empty() const { return size() == 0; }
     __always_inline void     clear() {
         nodes_.resize(1);
-        nodes_.front() = Node();
+        nodes_.front().reset();
         size_ = 0;
     }
 
@@ -41,11 +47,14 @@ public:
         using pointer = value_type *;
         using reference = value_type &;
 
-        Iterator(const QuadTree<StorageType, CoordinateType> *tree,
-                 uint64_t                                     node_index,
-                 uint8_t                                      item_index)
+        Iterator(const QuadTree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree,
+                 uint64_t                                                        node_index,
+                 uint8_t                                                         item_index)
             : tree_(tree), node_index_(node_index), item_index_(item_index) {}
-        Iterator(const QuadTree<StorageType, CoordinateType> *tree) : tree_(tree) { end(); }
+        Iterator(const QuadTree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree)
+            : tree_(tree) {
+            end();
+        }
         ~Iterator() = default;
 
         __always_inline auto operator*() const {
@@ -54,7 +63,7 @@ public:
 
         Iterator &operator++() {
             assert(node_index_ != Node::NO_INDEX);
-            assert(node_index < tree->nodes_.size());
+            assert(node_index_ < tree_->nodes_.size());
 
             const Node *node = &tree_->nodes_[node_index_];
             if (node->is_a_leaf() && ++item_index_ < node->leaves.size) {
@@ -86,7 +95,7 @@ public:
             item_index_ = 0;
         }
 
-        const QuadTree<StorageType, CoordinateType> *tree_;
+        const QuadTree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree_;
 
         uint64_t node_index_;
         uint8_t  item_index_;
@@ -114,18 +123,6 @@ public:
         return emplace_recursively(0, boundaries_, x, y, std::forward<Args>(args)...);
     }
 
-    __always_inline std::pair<Iterator, bool> insert(CoordinateType x,
-                                                     CoordinateType y,
-                                                     StorageType  &&storage) {
-        return emplace(x, y, storage);
-    }
-
-    __always_inline std::pair<Iterator, bool> insert(CoordinateType     x,
-                                                     CoordinateType     y,
-                                                     const StorageType &storage) {
-        return emplace(x, y, storage);
-    }
-
     std::vector<Iterator> nearest(CoordinateType x, CoordinateType y) const {
         CoordinateType        nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
         std::vector<Iterator> results;
@@ -143,7 +140,6 @@ public:
         assert(is_inside_bounding_box(x, y, boundaries_));
 
         Iterator it = end();
-        /// Can be faster by checking a point because there are no bounding boxes.
         find({x, y, x, y}, [&](Iterator found) { it = found; });
 
         return it;
@@ -160,7 +156,7 @@ private:
         StorageType    storage;
 
         template <typename... Args>
-        NodeContent(CoordinateType x_, CoordinateType y_, Args &&...args)
+        __always_inline NodeContent(CoordinateType x_, CoordinateType y_, Args &&...args)
             : x(x_), y(y_), storage(std::forward<Args>(args)...) {}
     };
 
@@ -177,9 +173,27 @@ private:
         };
         bool branch;
 
-        __always_inline      Node() : branch(false) { leaves.size = 0; }
+        __always_inline Node() { reset(); }
+        __always_inline Node(Node &&other) : branch(other.branch) {
+            if (is_a_branch()) {
+                children = std::move(other.children);
+            } else {
+                leaves = std::move(other.leaves);
+            }
+        }
+        __always_inline ~Node() {
+            if (is_a_leaf()) {
+                for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
+                    leaves.items[i].storage.~StorageType();
+                }
+            }
+        }
         __always_inline bool is_a_branch() const { return branch; }
         __always_inline bool is_a_leaf() const { return !is_a_branch(); }
+        __always_inline void reset() {
+            leaves.size = 0;
+            branch = false;
+        }
     };
 
     __always_inline std::tuple<CoordinateType, CoordinateType, const StorageType &> operator()(
@@ -204,9 +218,10 @@ private:
         CoordinateType origin_y =
             (boundaries.top_y - boundaries.bottom_y) / 2 + boundaries.bottom_y;
 
-        return Quadrant::NE + ((y >= origin_y) * (x < origin_x)) * Quadrant::NW +
-               (y < origin_y) * ((x < origin_x) * Quadrant::SW +
-                                 (y < origin_y) * (x >= origin_x) * Quadrant::SE);
+        // This logic must match integer flooring (less-or-equal instead of greater-or-equal).
+        return Quadrant::NE + ((y > origin_y) * (x <= origin_x)) * Quadrant::NW +
+               (y <= origin_y) * ((x <= origin_x) * Quadrant::SW +
+                                  (y <= origin_y) * (x > origin_x) * Quadrant::SE);
     }
 
     static __always_inline BoundingBox<CoordinateType> compute_new_boundaries(

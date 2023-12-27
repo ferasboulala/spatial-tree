@@ -18,7 +18,7 @@ __always_inline T euclidean_distance_squared_impl(AbsDiff absdiff, T x1, T x2, A
 
 template <typename T>
 struct SafeAbsDiff {
-    __always_inline T safe_absdiff(T x, T y) {
+    static __always_inline T safe_absdiff(T x, T y) {
         const bool gt = x > y;
         return gt * (x - y) + (1 - gt) * (y - x);
     }
@@ -27,8 +27,8 @@ struct SafeAbsDiff {
 
 template <typename T>
 struct UnsafeAbsDiff {
-    __always_inline T unsafe_absdiff(T x, T y) { return x - y; }
-    __always_inline T operator()(T x, T y) { return unsafe_absdiff(x, y); }
+    static __always_inline T unsafe_absdiff(T x, T y) { return x - y; }
+    __always_inline T        operator()(T x, T y) { return unsafe_absdiff(x, y); }
 };
 
 }  // namespace
@@ -37,8 +37,8 @@ namespace st {
 
 template <typename T>
 T absdiff(T x, T y) {
-    if constexpr (std::is_floating_point_v<T> || std::is_signed_v<T>) {
-        return UnsafeAbsDiff<T>()(x, y);
+    if constexpr (std::is_floating_point_v<T>) {
+        return std::fabs(UnsafeAbsDiff<T>()(x, y));
     } else {
         return SafeAbsDiff<T>()(x, y);
     }

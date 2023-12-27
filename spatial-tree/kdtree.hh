@@ -137,18 +137,6 @@ public:
         return emplace_recursively(0, {x, y}, std::forward<Args>(args)...);
     }
 
-    __always_inline std::pair<Iterator, bool> insert(CoordinateType x,
-                                                     CoordinateType y,
-                                                     StorageType  &&storage) {
-        return emplace(x, y, storage);
-    }
-
-    __always_inline std::pair<Iterator, bool> insert(CoordinateType     x,
-                                                     CoordinateType     y,
-                                                     const StorageType &storage) {
-        return emplace(x, y, storage);
-    }
-
     std::vector<Iterator> nearest(CoordinateType x, CoordinateType y) const {
         std::vector<Iterator> ret;
 

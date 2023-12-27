@@ -14,5 +14,6 @@ if (${GTest_FOUND})
  
    create_test("test_kdtree" kdtree.cc)
    create_test("test_quadtree" quadtree.cc)
-   create_test("test_utils" utils.cc)
+   create_test("test_euclide" euclide.cc)
+   create_test("test_intervals" intervals.cc)
 endif()

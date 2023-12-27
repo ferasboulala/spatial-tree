@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cassert>
 #include <limits>
 
@@ -7,15 +8,7 @@ namespace st {
 template <typename CoordinateType>
 struct BoundingBox {
     CoordinateType  top_x, top_y, bottom_x, bottom_y;
-    __always_inline BoundingBox()
-        : top_x(std::numeric_limits<CoordinateType>::lowest()),
-          top_y(std::numeric_limits<CoordinateType>::max()),
-          bottom_x(std::numeric_limits<CoordinateType>::max()),
-          bottom_y(std::numeric_limits<CoordinateType>::lowest()) {
-        assert(top_x <= bottom_x);
-        assert(top_y >= bottom_y);
-    }
-    /// FIXME: Re-order with top/bottom x and bottom/top y
+    __always_inline BoundingBox() {}
     __always_inline BoundingBox(CoordinateType top_x_,
                                 CoordinateType top_y_,
                                 CoordinateType bottom_x_,
