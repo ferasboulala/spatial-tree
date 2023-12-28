@@ -6,4 +6,17 @@
 #define CLANG_COMPILER
 #endif
 
+#if defined(GNU_COMPILER)
+#define UNROLL_2 _Pragma("GCC unroll 2")
+#define UNROLL_3 _Pragma("GCC unroll 3")
+#define UNROLL_4 _Pragma("GCC unroll 4")
+#define UNROLL_8 _Pragma("GCC unroll 8")
+#elif defined(CLANG_COMPILER)
+#define UNROLL_2 _Pragma("clang loop unroll_count(2)")
+#define UNROLL_3 _Pragma("clang loop unroll_count(3)")
+#define UNROLL_4 _Pragma("clang loop unroll_count(4)")
+#define UNROLL_8 _Pragma("clang loop unroll_count(8)")
+#define UNROLL(factor) DO_PRAGMA("clang loop unroll_count(" #factor ")")
+#endif
+
 // TODO: Avoid the use of __always_inline and other aliases. Make that platform independent.

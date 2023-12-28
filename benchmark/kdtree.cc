@@ -21,6 +21,12 @@ void find(benchmark::State &state) {
 }
 
 template <typename CoordT>
+void find_single(benchmark::State &state) {
+    auto tree = st::KDTree<VALUE_TYPE, CoordT>();
+    benchmark_find_single<CoordT>(state, tree);
+}
+
+template <typename CoordT>
 void nearest(benchmark::State &state) {
     auto tree = st::KDTree<VALUE_TYPE, CoordT>();
     benchmark_nearest<CoordT>(state, tree);
@@ -31,10 +37,6 @@ static constexpr uint64_t HIGH = 1 << 20;
 
 BENCHMARK(insertions<double>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(find<double>)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(find_single<double>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(nearest<double>)->RangeMultiplier(2)->Range(LOW, HIGH);
-
-// BENCHMARK(insertions<int>)->RangeMultiplier(2)->Range(LOW, HIGH);
-// BENCHMARK(find<int>)->RangeMultiplier(2)->Range(LOW, HIGH);
-// BENCHMARK(nearest<int>)->RangeMultiplier(2)->Range(LOW, HIGH);
-
 BENCHMARK_MAIN();

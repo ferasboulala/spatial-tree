@@ -45,7 +45,7 @@ void benchmark_insertions(benchmark::State &state, TreeType &tree) {
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            bool inserted = tree.emplace(x, y, i).second;
+            bool inserted = tree.emplace(x, y).second;
             n_points_inserted += inserted;
             n_collisions += (1 - inserted);
         }
@@ -71,7 +71,7 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            tree.emplace(x, y, i);
+            tree.emplace(x, y);
         }
     }
 
@@ -97,8 +97,38 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
         }
     }
     state.counters["avg_area (%)"] = average_area / AREA;
-    state.counters["found"] = n_points_found / state.iterations();
+    state.counters["found"] = n_points_found / state.iterations() / n_bounding_boxes;
     state.SetItemsProcessed(n_bounding_boxes * state.iterations());
+}
+
+template <typename CoordT, typename TreeType>
+void benchmark_find_single(benchmark::State &state, TreeType &tree) {
+    static_assert(std::is_signed_v<CoordT>);
+
+    static constexpr CoordT BEG = BEG_TYPELESS;
+    static constexpr CoordT END = END_TYPELESS;
+    static constexpr CoordT AREA = (END - BEG) * (END - BEG);
+    static_assert(AREA > BEG && AREA > END);
+
+    const uint64_t test_size = state.range(0);
+    const auto     points = generate_points(BEG, END, test_size);
+
+    for (auto _ : state) {
+        for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = points[i];
+            tree.emplace(x, y);
+        }
+    }
+
+    static constexpr uint64_t n_points_to_find = 1 << 7;
+    const auto points_to_find = generate_points(BEG, END, n_points_to_find);
+
+    for (auto _ : state) {
+        for (auto [x, y] : points_to_find) {
+            tree.find(x, y);
+        }
+    }
+    state.SetItemsProcessed(n_points_to_find * state.iterations());
 }
 
 template <typename CoordT, typename TreeType>
@@ -114,7 +144,7 @@ void benchmark_nearest(benchmark::State &state, TreeType &tree) {
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            tree.emplace(x, y, i);
+            tree.emplace(x, y);
         }
     }
 

@@ -4,7 +4,6 @@
 #include <cassert>
 #include <cstdint>
 #include <functional>
-#include <iostream>
 #include <limits>
 #include <numeric>
 #include <tuple>
@@ -15,7 +14,7 @@
 #include "intervals.hh"
 
 namespace st {
-template <typename StorageType, typename CoordinateType = int, uint8_t MAXIMUM_NODE_SIZE = 4>
+template <typename StorageType, typename CoordinateType = int, uint8_t MAXIMUM_NODE_SIZE = 32>
 class QuadTree {
 public:
     static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
@@ -143,13 +142,8 @@ public:
         find_recursively(bbox, boundaries_, func, 0);
     }
 
-    Iterator find(CoordinateType x, CoordinateType y) const {
-        assert(is_inside_bounding_box(x, y, boundaries_));
-
-        Iterator it = end();
-        find({x, y, x, y}, [&](Iterator found) { it = found; });
-
-        return it;
+    __always_inline Iterator find(CoordinateType x, CoordinateType y) const {
+        return find_recursively(x, y, boundaries_, 0);
     }
 
 private:
@@ -190,12 +184,7 @@ private:
         }
         __always_inline ~Node() {
             if (is_a_leaf()) {
-#ifdef GNU_COMPILER
-#pragma GCC unroll 4
-#endif
-#ifdef CLANG_COMPILER
-#pragma clang loop unroll_count(4)
-#endif
+                UNROLL_4
                 for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
                     leaves.items[i].storage.~StorageType();
                 }
@@ -225,8 +214,6 @@ private:
     static __always_inline auto belongs_to_quadrant(const BoundingBox<CoordinateType> &boundaries,
                                                     CoordinateType                     x,
                                                     CoordinateType                     y) {
-        assert(is_inside_bounding_box(x, y, boundaries));
-
         CoordinateType origin_x = (boundaries.bottom_x - boundaries.top_x) / 2 + boundaries.top_x;
         CoordinateType origin_y =
             (boundaries.top_y - boundaries.bottom_y) / 2 + boundaries.bottom_y;
@@ -267,11 +254,11 @@ private:
         CoordinateType                     x,
         CoordinateType                     y,
         Args &&...args) {
-        const auto selected_quadrant = belongs_to_quadrant(boundaries, x, y);
-        const auto new_boundaries = compute_new_boundaries(selected_quadrant, boundaries);
+        const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
+        const auto new_boundaries = compute_new_boundaries(selected_quad, boundaries);
 
         return emplace_recursively(
-            children[selected_quadrant], new_boundaries, x, y, std::forward<Args>(args)...);
+            children[selected_quad], new_boundaries, x, y, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
@@ -314,12 +301,7 @@ private:
 
         Node &node_as_branch = nodes_[node_index];
 
-#ifdef GNU_COMPILER
-#pragma GCC unroll 4
-#endif
-#ifdef CLANG_COMPILER
-#pragma clang loop unroll_count(4)
-#endif
+        UNROLL_4
         for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
             const auto [x_, y_, storage] = node_as_branch.leaves.items[i];
             emplace_recursively_helper(new_children, boundaries, x_, y_, storage);
@@ -331,6 +313,27 @@ private:
 
         return emplace_recursively_helper(
             new_children, boundaries, x, y, std::forward<Args>(args)...);
+    }
+
+    Iterator find_recursively(CoordinateType                     x,
+                              CoordinateType                     y,
+                              const BoundingBox<CoordinateType> &boundaries,
+                              uint64_t                           node_index) const {
+        assert(node_index < nodes_.size());
+
+        const Node &node = nodes_[node_index];
+        if (node.is_a_leaf()) {
+            for (uint64_t i = 0; i < node.leaves.size; ++i) {
+                if (x == node.leaves.items[i].x && y == node.leaves.items[i].y) {
+                    return Iterator(this, node_index, i);
+                }
+            }
+            return end();
+        }
+
+        const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
+        return find_recursively(
+            x, y, compute_new_boundaries(selected_quad, boundaries), node.children[selected_quad]);
     }
 
     void find_recursively(const BoundingBox<CoordinateType> &bbox,
@@ -349,12 +352,7 @@ private:
             return;
         }
 
-#ifdef GNU_COMPILER
-#pragma GCC unroll 4
-#endif
-#ifdef CLANG_COMPILER
-#pragma clang loop unroll_count(4)
-#endif
+        UNROLL_4
         for (uint64_t i = 0; i < 4; ++i) {
             auto new_boundaries = compute_new_boundaries(i, boundaries);
             if (bounding_boxes_overlap(bbox, new_boundaries)) {
@@ -398,41 +396,22 @@ private:
             return;
         }
 
-        // auto selected_quadrant = belongs_to_quadrant(boundaries, x, y);
-        // nearest_recursively(node.children[selected_quadrant],
-        //                     compute_new_boundaries(selected_quadrant, boundaries),
-        //                     x,
-        //                     y,
-        //                     nearest_distance_squared,
-        //                     results);
+        const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
+        nearest_recursively(node.children[selected_quad],
+                            compute_new_boundaries(selected_quad, boundaries),
+                            x,
+                            y,
+                            nearest_distance_squared,
+                            results);
 
-        std::array<CoordinateType, 4>              lower_bounds;
-        std::array<BoundingBox<CoordinateType>, 4> quadrant_boundaries;
-#ifdef GNU_COMPILER
-#pragma GCC unroll 4
-#endif
-#ifdef CLANG_COMPILER
-#pragma clang loop unroll_count(4)
-#endif
-        for (uint64_t i = 0; i < 4; ++i) {
-            quadrant_boundaries[i] = compute_new_boundaries(i, boundaries);
-            /// TODO: Optimize using indices + modulo.
-            lower_bounds[i] = smallest_distance_from_bounding_box(quadrant_boundaries[i], x, y);
-        }
-
-        std::array<int, 4> ordered_quadrants;
-        std::iota(ordered_quadrants.begin(), ordered_quadrants.end(), 0);
-        std::sort(ordered_quadrants.begin(), ordered_quadrants.end(), [&](auto lhs, auto rhs) {
-            return lower_bounds[lhs] < lower_bounds[rhs];
-        });
-        for (auto quad : ordered_quadrants) {
-            if (lower_bounds[quad] <= nearest_distance_squared) {
-                nearest_recursively(node.children[quad],
-                                    quadrant_boundaries[quad],
-                                    x,
-                                    y,
-                                    nearest_distance_squared,
-                                    results);
+        UNROLL_3
+        for (uint64_t i = 1; i <= 3; ++i) {
+            uint64_t   quad = (i + selected_quad) % 4;
+            const auto new_boundaries = compute_new_boundaries(quad, boundaries);
+            if (smallest_distance_from_bounding_box(new_boundaries, x, y) <=
+                nearest_distance_squared) {
+                nearest_recursively(
+                    node.children[quad], new_boundaries, x, y, nearest_distance_squared, results);
             }
         }
     }
