@@ -12,5 +12,5 @@ if (${benchmark_FOUND})
  
    create_benchmark("benchmark_quadtree" quadtree.cc)
    create_benchmark("benchmark_kdtree" kdtree.cc)
-   create_benchmark("benchmark_vector" vector.cc)
+   create_benchmark("benchmark_hashtable" hashtable.cc)
 endif()

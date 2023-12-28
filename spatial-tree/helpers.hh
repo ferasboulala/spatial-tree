@@ -1,3 +1,5 @@
+#pragma once
+
 #include <tuple>
 
 #include "compilation.hh"
@@ -22,8 +24,12 @@ struct EnumerationIterator {
         return std::make_tuple(idx, *it);
     }
 
-    __always_inline bool operator==(const SequenceIterator& other) { return it == other.it; }
-    __always_inline bool operator!=(const SequenceIterator& other) { return it != other.it; }
+    __always_inline bool operator==(const EnumerationIterator<SequenceIterator>& other) {
+        return it == other.it;
+    }
+    __always_inline bool operator!=(const EnumerationIterator<SequenceIterator>& other) {
+        return it != other.it;
+    }
 };
 
 template <typename SequenceT>

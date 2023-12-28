@@ -17,6 +17,9 @@ struct BoundingBox {
         assert(top_x <= bottom_x);
         assert(top_y >= bottom_y);
     }
+    __always_inline CoordinateType area() const {
+        return (bottom_x - top_x) * (top_y - bottom_y);
+    }
 };
 
 template <typename CoordinateType>
