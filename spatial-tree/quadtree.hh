@@ -21,13 +21,20 @@ public:
     static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
 
     QuadTree()
+        // Dividing by 2 to be able to do (upper bound +/- lower bound) without overflowing.
         : boundaries_(std::numeric_limits<CoordinateType>::lowest() / 2,
                       std::numeric_limits<CoordinateType>::max() / 2,
                       std::numeric_limits<CoordinateType>::max() / 2,
                       std::numeric_limits<CoordinateType>::lowest() / 2) {
         clear();
     }
-    QuadTree(const BoundingBox<CoordinateType> &boundaries) : boundaries_(boundaries) { clear(); }
+    QuadTree(const BoundingBox<CoordinateType> &boundaries) : boundaries_(boundaries) {
+        assert(boundaries_.top_x >= std::numeric_limits<CoordinateType>::lowest() / 2);
+        assert(boundaries_.top_y <= std::numeric_limits<CoordinateType>::max() / 2);
+        assert(boundaries_.bottom_x <= std::numeric_limits<CoordinateType>::max() / 2);
+        assert(boundaries_.bottom_y >= std::numeric_limits<CoordinateType>::lowest() / 2);
+        clear();
+    }
 
     ~QuadTree() = default;
 
@@ -277,16 +284,14 @@ private:
                 node.children, boundaries, x, y, std::forward<Args>(args)...);
         }
 
-        if (node.leaves.size) {
-            auto beg = node.leaves.items.begin();
-            auto end = node.leaves.items.begin() + node.leaves.size;
-            auto it = std::find_if(beg, end, [&](auto &entry) {
-                const auto &[x_, y_, storage_] = entry;
-                return x == x_ && y == y_;
-            });
-            if (it != end) {
-                return {Iterator(this, node_index, std::distance(beg, it)), false};
-            }
+        int64_t item_index = 0;
+        for (uint64_t i = 0; i < node.leaves.size; ++i) {
+            const auto &[x_, y_, storage] = node.leaves.items[i];
+            item_index += (i + 1) * (x == x_ && y == y_);
+        }
+
+        if (item_index) {
+            return {Iterator(this, node_index, item_index - 1), false};
         }
 
         const bool node_is_full = node.leaves.size == MAXIMUM_NODE_SIZE;
