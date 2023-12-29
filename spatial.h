@@ -30,15 +30,10 @@
 
 namespace st {
 
-#ifndef __always_inline
-#define __undef_always_inline
-#define __always_inline __attribute__((__always_inline__))
-#endif
-
 template <typename CoordinateType>
 struct bounding_box {
-    CoordinateType  top_x, top_y, bottom_x, bottom_y;
-    __always_inline bounding_box()
+    CoordinateType top_x, top_y, bottom_x, bottom_y;
+    inline bounding_box()
         : top_x(std::numeric_limits<CoordinateType>::lowest() / 2),
           top_y(std::numeric_limits<CoordinateType>::max() / 2),
           bottom_x(std::numeric_limits<CoordinateType>::max() / 2),
@@ -46,26 +41,26 @@ struct bounding_box {
         assert(top_x <= bottom_x);
         assert(top_y >= bottom_y);
     }
-    __always_inline bounding_box(CoordinateType top_x_,
-                                 CoordinateType top_y_,
-                                 CoordinateType bottom_x_,
-                                 CoordinateType bottom_y_)
+    inline bounding_box(CoordinateType top_x_,
+                        CoordinateType top_y_,
+                        CoordinateType bottom_x_,
+                        CoordinateType bottom_y_)
         : top_x(top_x_), top_y(top_y_), bottom_x(bottom_x_), bottom_y(bottom_y_) {
         assert(top_x <= bottom_x);
         assert(top_y >= bottom_y);
     }
-    __always_inline CoordinateType area() const { return (bottom_x - top_x) * (top_y - bottom_y); }
+    inline CoordinateType area() const { return (bottom_x - top_x) * (top_y - bottom_y); }
 };
 
 namespace internal {
 
 template <typename AbsDiff, typename T, typename... Args>
-__always_inline T euclidean_distance_squared_impl(AbsDiff) {
+inline T euclidean_distance_squared_impl(AbsDiff) {
     return T(0);
 }
 
 template <typename AbsDiff, typename T, typename... Args>
-__always_inline T euclidean_distance_squared_impl(AbsDiff absdiff, T x1, T x2, Args... xs) {
+inline T euclidean_distance_squared_impl(AbsDiff absdiff, T x1, T x2, Args... xs) {
     const T sum = euclidean_distance_squared_impl<AbsDiff, T>(absdiff, xs...);
     const T dx = absdiff(x2, x1);
 
@@ -74,21 +69,21 @@ __always_inline T euclidean_distance_squared_impl(AbsDiff absdiff, T x1, T x2, A
 
 template <typename T>
 struct SafeAbsDiff {
-    static __always_inline T safe_absdiff(T x, T y) {
+    static inline T safe_absdiff(T x, T y) {
         const bool gt = x > y;
         return gt * (x - y) + (1 - gt) * (y - x);
     }
-    __always_inline T operator()(T x, T y) { return safe_absdiff(x, y); }
+    inline T operator()(T x, T y) { return safe_absdiff(x, y); }
 };
 
 template <typename T>
 struct UnsafeAbsDiff {
-    static __always_inline T unsafe_absdiff(T x, T y) { return x - y; }
-    __always_inline T        operator()(T x, T y) { return unsafe_absdiff(x, y); }
+    static inline T unsafe_absdiff(T x, T y) { return x - y; }
+    inline T        operator()(T x, T y) { return unsafe_absdiff(x, y); }
 };
 
 template <typename T>
-T absdiff(T x, T y) {
+inline T absdiff(T x, T y) {
     if constexpr (std::is_floating_point_v<T>) {
         return std::fabs(UnsafeAbsDiff<T>()(x, y));
     } else {
@@ -97,7 +92,7 @@ T absdiff(T x, T y) {
 }
 
 template <typename T, typename... Args>
-__always_inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
+inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
     if constexpr (std::is_floating_point_v<T> || std::is_signed_v<T>) {
         return euclidean_distance_squared_impl(UnsafeAbsDiff<T>(), x1, x2, xs...);
     } else {
@@ -106,24 +101,24 @@ __always_inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
 }
 
 template <typename CoordinateType>
-__always_inline bool is_within_interval(CoordinateType x, CoordinateType beg, CoordinateType end) {
+inline bool is_within_interval(CoordinateType x, CoordinateType beg, CoordinateType end) {
     assert(end >= beg);
     return x >= beg && x <= end;
 }
 
 template <typename CoordinateType>
-static __always_inline bool is_inside_bounding_box(CoordinateType                      x,
-                                                   CoordinateType                      y,
-                                                   const bounding_box<CoordinateType> &bbox) {
+static inline bool is_inside_bounding_box(CoordinateType                      x,
+                                          CoordinateType                      y,
+                                          const bounding_box<CoordinateType> &bbox) {
     return is_within_interval(x, bbox.top_x, bbox.bottom_x) &&
            is_within_interval(y, bbox.bottom_y, bbox.top_y);
 }
 
 template <typename CoordinateType>
-static __always_inline bool intervals_overlap(CoordinateType lhs_beg,
-                                              CoordinateType lhs_end,
-                                              CoordinateType rhs_beg,
-                                              CoordinateType rhs_end) {
+static inline bool intervals_overlap(CoordinateType lhs_beg,
+                                     CoordinateType lhs_end,
+                                     CoordinateType rhs_beg,
+                                     CoordinateType rhs_end) {
     assert(lhs_beg <= lhs_end);
     assert(rhs_beg <= rhs_end);
 
@@ -131,8 +126,8 @@ static __always_inline bool intervals_overlap(CoordinateType lhs_beg,
 }
 
 template <typename CoordinateType>
-static __always_inline bool bounding_boxes_overlap(const bounding_box<CoordinateType> &lhs,
-                                                   const bounding_box<CoordinateType> &rhs) {
+static inline bool bounding_boxes_overlap(const bounding_box<CoordinateType> &lhs,
+                                          const bounding_box<CoordinateType> &rhs) {
     return intervals_overlap(lhs.top_x, lhs.bottom_x, rhs.top_x, rhs.bottom_x) &&
            intervals_overlap(lhs.bottom_y, lhs.top_y, rhs.bottom_y, rhs.top_y);
 }
@@ -162,9 +157,9 @@ public:
 
     ~spatial_tree() = default;
 
-    __always_inline uint64_t size() const { return size_; }
-    __always_inline bool     empty() const { return size() == 0; }
-    __always_inline void     clear() {
+    inline uint64_t size() const { return size_; }
+    inline bool     empty() const { return size() == 0; }
+    inline void     clear() {
         nodes_.resize(1);
         nodes_.front().reset();
         size_ = 0;
@@ -178,19 +173,17 @@ public:
         using pointer = value_type *;
         using reference = value_type &;
 
-        iterator(const spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree,
-                 uint64_t                                                            node_index,
-                 uint8_t                                                             item_index)
+        inline iterator(const spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree,
+                        uint64_t node_index,
+                        uint8_t  item_index)
             : tree_(tree), node_index_(node_index), item_index_(item_index) {}
-        iterator(const spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree)
+        inline iterator(const spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree)
             : tree_(tree) {
             end();
         }
-        ~iterator() = default;
+        inline ~iterator() = default;
 
-        __always_inline auto operator*() const {
-            return tree_->operator()(node_index_, item_index_);
-        }
+        inline auto operator*() const { return tree_->operator()(node_index_, item_index_); }
 
         iterator &operator++() {
             assert(node_index_ != tree_node::NO_INDEX);
@@ -213,15 +206,15 @@ public:
             return *this;
         }
 
-        __always_inline bool operator==(const iterator &other) const {
+        inline bool operator==(const iterator &other) const {
             assert(tree_ == other.tree_);
             return node_index_ == other.node_index_ && item_index_ == other.item_index_;
         }
 
-        __always_inline bool operator!=(const iterator &other) const { return !(*this == other); }
+        inline bool operator!=(const iterator &other) const { return !(*this == other); }
 
     private:
-        __always_inline void end() {
+        inline void end() {
             node_index_ = tree_node::NO_INDEX;
             item_index_ = 0;
         }
@@ -232,8 +225,8 @@ public:
         uint8_t  item_index_;
     };
 
-    __always_inline iterator end() const { return iterator(this); }
-    __always_inline iterator begin() const {
+    inline iterator end() const { return iterator(this); }
+    inline iterator begin() const {
         if (empty()) {
             return end();
         }
@@ -246,9 +239,7 @@ public:
     }
 
     template <typename... Args>
-    __always_inline std::pair<iterator, bool> emplace(CoordinateType x,
-                                                      CoordinateType y,
-                                                      Args &&...args) {
+    inline std::pair<iterator, bool> emplace(CoordinateType x, CoordinateType y, Args &&...args) {
         assert(is_inside_bounding_box(x, y, boundaries_));
 
         return emplace_recursively(0, boundaries_, x, y, std::forward<Args>(args)...);
@@ -263,11 +254,11 @@ public:
     }
 
     template <typename Func>
-    __always_inline void find(const bounding_box<CoordinateType> &bbox, Func func) const {
+    inline void find(const bounding_box<CoordinateType> &bbox, Func func) const {
         find_recursively(bbox, boundaries_, func, 0);
     }
 
-    __always_inline iterator find(CoordinateType x, CoordinateType y) const {
+    inline iterator find(CoordinateType x, CoordinateType y) const {
         return find_recursively(x, y, boundaries_, 0);
     }
 
@@ -283,7 +274,7 @@ private:
         StorageType    storage;
 
         template <typename... Args>
-        __always_inline tree_node_with_storage(CoordinateType x_, CoordinateType y_, Args &&...args)
+        inline tree_node_with_storage(CoordinateType x_, CoordinateType y_, Args &&...args)
             : x(x_), y(y_), storage(std::forward<Args>(args)...) {}
     };
 
@@ -291,7 +282,7 @@ private:
         CoordinateType x;
         CoordinateType y;
 
-        __always_inline tree_node_no_storage(CoordinateType x_, CoordinateType y_) : x(x_), y(y_) {}
+        inline tree_node_no_storage(CoordinateType x_, CoordinateType y_) : x(x_), y(y_) {}
     };
 
     struct tree_node_storage : std::conditional<std::is_void_v<StorageType>,
@@ -315,15 +306,15 @@ private:
         };
         bool is_branch;
 
-        __always_inline tree_node() { reset(); }
-        __always_inline tree_node(tree_node &&other) : is_branch(other.is_branch) {
+        inline tree_node() { reset(); }
+        inline tree_node(tree_node &&other) : is_branch(other.is_branch) {
             if (is_a_branch()) {
                 branch = std::move(other.branch);
             } else {
                 leaf = std::move(other.leaf);
             }
         }
-        __always_inline ~tree_node() {
+        inline ~tree_node() {
             if constexpr (!std::is_void_v<StorageType>) {
                 if (is_a_leaf()) {
                     __unroll_4 for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
@@ -332,15 +323,15 @@ private:
                 }
             }
         }
-        __always_inline bool is_a_branch() const { return is_branch; }
-        __always_inline bool is_a_leaf() const { return !is_a_branch(); }
-        __always_inline void reset() {
+        inline bool is_a_branch() const { return is_branch; }
+        inline bool is_a_leaf() const { return !is_a_branch(); }
+        inline void reset() {
             leaf.size = 0;
             is_branch = false;
         }
     };
 
-    __always_inline auto operator()(uint64_t node_index, uint64_t item_index) const {
+    inline auto operator()(uint64_t node_index, uint64_t item_index) const {
         assert(node_index < nodes_.size());
         const tree_node &node = nodes_[node_index];
 
@@ -356,9 +347,9 @@ private:
         }
     }
 
-    static __always_inline auto belongs_to_quadrant(const bounding_box<CoordinateType> &boundaries,
-                                                    CoordinateType                      x,
-                                                    CoordinateType                      y) {
+    static inline auto belongs_to_quadrant(const bounding_box<CoordinateType> &boundaries,
+                                           CoordinateType                      x,
+                                           CoordinateType                      y) {
         CoordinateType origin_x = (boundaries.bottom_x - boundaries.top_x) / 2 + boundaries.top_x;
         CoordinateType origin_y =
             (boundaries.top_y - boundaries.bottom_y) / 2 + boundaries.bottom_y;
@@ -370,7 +361,7 @@ private:
                                   (y <= origin_y) * (x > origin_x) * cartesian_quadrant::SE);
     }
 
-    static __always_inline bounding_box<CoordinateType> compute_new_boundaries(
+    static inline bounding_box<CoordinateType> compute_new_boundaries(
         uint64_t quad, const bounding_box<CoordinateType> &boundaries) {
         static std::array<std::tuple<bool, bool>, 4> factors;
         factors[cartesian_quadrant::NE] = std::tuple<bool, bool>{1, 1};
@@ -394,7 +385,7 @@ private:
     }
 
     template <typename... Args>
-    __always_inline std::pair<iterator, bool> emplace_recursively_helper(
+    inline std::pair<iterator, bool> emplace_recursively_helper(
         const std::array<uint64_t, 4>      &children,
         const bounding_box<CoordinateType> &boundaries,
         CoordinateType                      x,
@@ -479,10 +470,10 @@ private:
             new_children, boundaries, x, y, std::forward<Args>(args)...);
     }
 
-    iterator find_recursively(CoordinateType                      x,
-                              CoordinateType                      y,
-                              const bounding_box<CoordinateType> &boundaries,
-                              uint64_t                            node_index) const {
+    inline iterator find_recursively(CoordinateType                      x,
+                                     CoordinateType                      y,
+                                     const bounding_box<CoordinateType> &boundaries,
+                                     uint64_t                            node_index) const {
         assert(node_index < nodes_.size());
 
         const tree_node &node = nodes_[node_index];
@@ -503,10 +494,10 @@ private:
     }
 
     template <typename Func>
-    void find_recursively(const bounding_box<CoordinateType> &bbox,
-                          const bounding_box<CoordinateType> &boundaries,
-                          Func                                func,
-                          uint64_t                            node_index) const {
+    inline void find_recursively(const bounding_box<CoordinateType> &bbox,
+                                 const bounding_box<CoordinateType> &boundaries,
+                                 Func                                func,
+                                 uint64_t                            node_index) const {
         assert(node_index < nodes_.size());
 
         const tree_node &node = nodes_[node_index];
@@ -527,7 +518,7 @@ private:
         }
     }
 
-    static __always_inline CoordinateType smallest_distance_from_bounding_box(
+    static inline CoordinateType smallest_distance_from_bounding_box(
         const bounding_box<CoordinateType> &bbox, CoordinateType x, CoordinateType y) {
         CoordinateType up = (y > bbox.top_y) * (y - bbox.top_y);
         CoordinateType down = (y < bbox.bottom_y) * (bbox.bottom_y - y);
@@ -617,8 +608,4 @@ class spatial_set : public internal::spatial_tree<void, CoordinateType, MAXIMUM_
 #undef __unroll_3
 #undef __unroll_4
 #undef __unroll_8
-#endif
-
-#ifdef __undef_always_inline
-#undef __always_inline
 #endif

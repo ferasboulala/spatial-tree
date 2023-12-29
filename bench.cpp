@@ -173,7 +173,7 @@ template <typename StorageType, typename CoordinateType>
 class hash_table_oracle {
 private:
     struct HashFunc {
-        __always_inline size_t
+        inline size_t
         operator()(const std::pair<CoordinateType, CoordinateType> &coords) const {
             auto [x, y] = coords;
 
@@ -189,10 +189,10 @@ private:
         std::unordered_map<std::pair<CoordinateType, CoordinateType>, StorageType, HashFunc>;
 
 public:
-    __always_inline void clear() { table_.clear(); }
+    inline void clear() { table_.clear(); }
 
     template <typename... Args>
-    __always_inline auto emplace(CoordinateType x, CoordinateType y, Args &&...args) {
+    inline auto emplace(CoordinateType x, CoordinateType y, Args &&...args) {
         return table_.emplace(std::pair<CoordinateType, CoordinateType>{x, y},
                               StorageType(std::forward<Args>(args)...));
     }
@@ -209,7 +209,7 @@ public:
         }
     }
 
-    __always_inline auto find(CoordinateType x, CoordinateType y) const {
+    inline auto find(CoordinateType x, CoordinateType y) const {
         return table_.find({x, y});
     }
 
