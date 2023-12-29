@@ -20,14 +20,13 @@ struct opaque_data {
     char opaque[1];
     opaque_data() {}
 };
-using VALUE_TYPE = opaque_data;
 static constexpr uint64_t MAX_NODE_SIZE = 32;
 
 template <typename CoordT>
 std::vector<std::pair<CoordT, CoordT>> generate_points(CoordT BEG, CoordT END, uint64_t test_size) {
-    using DistributionType = std::conditional<std::is_floating_point_v<CoordT>,
-                                              std::uniform_real_distribution<CoordT>,
-                                              std::uniform_int_distribution<CoordT>>::type;
+    using DistributionType = typename std::conditional<std::is_floating_point_v<CoordT>,
+                                                       std::uniform_real_distribution<CoordT>,
+                                                       std::uniform_int_distribution<CoordT>>::type;
     DistributionType                       distribution(BEG, END);
     std::default_random_engine             device;
     std::vector<std::pair<CoordT, CoordT>> points;
@@ -233,6 +232,7 @@ public:
         return nearest_points;
     }
 
+    using VALUE_TYPE = opaque_data;
     static void insertions(benchmark::State &state) {
         auto tree = hash_table_oracle<VALUE_TYPE, CoordinateType>();
         benchmark_insertions<CoordinateType>(state, tree);
@@ -256,6 +256,8 @@ public:
 private:
     TableType table_;
 };
+
+using VALUE_TYPE = void;
 
 template <typename CoordT>
 void insertions(benchmark::State &state) {

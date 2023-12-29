@@ -262,8 +262,8 @@ public:
         return results;
     }
 
-    __always_inline void find(const bounding_box<CoordinateType> &bbox,
-                              std::function<void(iterator)>       func) const {
+    template <typename Func>
+    __always_inline void find(const bounding_box<CoordinateType> &bbox, Func func) const {
         find_recursively(bbox, boundaries_, func, 0);
     }
 
@@ -318,7 +318,7 @@ private:
         __always_inline tree_node() { reset(); }
         __always_inline tree_node(tree_node &&other) : is_branch(other.is_branch) {
             if (is_a_branch()) {
-                branch= std::move(other.branch);
+                branch = std::move(other.branch);
             } else {
                 leaf = std::move(other.leaf);
             }
@@ -439,18 +439,13 @@ private:
             node.leaf.items[node.leaf.size].x = x;
             node.leaf.items[node.leaf.size].y = y;
             if constexpr (!std::is_void_v<StorageType>) {
-#if defined(__clang_compiler)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wmaybe-uninitialized"
-#elif defined(__gnu_compiler)
+#if defined(__gnu_compiler)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
                 node.leaf.items[node.leaf.size].storage =
                     std::move(StorageType(std::forward<Args>(args)...));
-#if defined(__clang_compiler)
-#pragma clang diagnostic pop
-#elif defined(__gnu_compiler)
+#if defined(__gnu_compiler)
 #pragma GCC diagnostic pop
 #endif
             }
@@ -507,9 +502,10 @@ private:
                                 node.branch.children[selected_quad]);
     }
 
+    template <typename Func>
     void find_recursively(const bounding_box<CoordinateType> &bbox,
                           const bounding_box<CoordinateType> &boundaries,
-                          std::function<void(iterator)>       func,
+                          Func                                func,
                           uint64_t                            node_index) const {
         assert(node_index < nodes_.size());
 
@@ -566,21 +562,25 @@ private:
             return;
         }
 
+        std::array<bounding_box<CoordinateType>, 4> new_boundaries;
+        __unroll_4 for (uint64_t i = 0; i < 4; ++i) {
+            new_boundaries[i] = compute_new_boundaries(i, boundaries);
+        }
+
         const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
         nearest_recursively(node.branch.children[selected_quad],
-                            compute_new_boundaries(selected_quad, boundaries),
+                            new_boundaries[selected_quad],
                             x,
                             y,
                             nearest_distance_squared,
                             results);
 
         __unroll_3 for (uint64_t i = 1; i <= 3; ++i) {
-            uint64_t   quad = (i + selected_quad) % 4;
-            const auto new_boundaries = compute_new_boundaries(quad, boundaries);
-            if (smallest_distance_from_bounding_box(new_boundaries, x, y) <=
+            uint64_t quad = (i + selected_quad) % 4;
+            if (smallest_distance_from_bounding_box(new_boundaries[quad], x, y) <=
                 nearest_distance_squared) {
                 nearest_recursively(node.branch.children[quad],
-                                    new_boundaries,
+                                    new_boundaries[quad],
                                     x,
                                     y,
                                     nearest_distance_squared,
