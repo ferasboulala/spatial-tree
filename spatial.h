@@ -32,7 +32,7 @@ namespace st {
 
 #ifndef __always_inline
 #define __undef_always_inline
-#define __always_inline __inline __attribute__((__always_inline__))
+#define __always_inline __attribute__((__always_inline__))
 #endif
 
 template <typename CoordinateType>
