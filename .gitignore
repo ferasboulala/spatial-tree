@@ -3,3 +3,4 @@ build
 .*sw*
 .vscode
 perf.*
+prof.*

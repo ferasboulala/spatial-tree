@@ -293,14 +293,16 @@ void nearest(benchmark::State &state) {
     benchmark_nearest<CoordT>(state, tree);
 }
 
-BENCHMARK(insertions<double>)->RangeMultiplier(2)->Range(LOW, HIGH);
-BENCHMARK(find<double>)->RangeMultiplier(2)->Range(LOW, HIGH);
-BENCHMARK(find_single<double>)->RangeMultiplier(2)->Range(LOW, HIGH);
-BENCHMARK(nearest<double>)->RangeMultiplier(2)->Range(LOW, HIGH);
+using COORD_TYPE = float;
 
-BENCHMARK(hash_table_oracle<int, double>::insertions)->RangeMultiplier(2)->Range(LOW, HIGH);
-BENCHMARK(hash_table_oracle<int, double>::find)->RangeMultiplier(2)->Range(LOW, HIGH);
-BENCHMARK(hash_table_oracle<int, double>::find_single)->RangeMultiplier(2)->Range(LOW, HIGH);
-BENCHMARK(hash_table_oracle<int, double>::nearest)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(insertions<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(find<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(find_single<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(nearest<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
+
+BENCHMARK(hash_table_oracle<int, COORD_TYPE>::insertions)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find_single)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(hash_table_oracle<int, COORD_TYPE>::nearest)->RangeMultiplier(2)->Range(LOW, HIGH);
 
 BENCHMARK_MAIN();
