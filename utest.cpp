@@ -1,8 +1,9 @@
 #ifdef NDEBUG
 #undef NDEBUG
-#include "spatial-tree/quadtree.hh"
+#include "spatial.h"
+#define NDEBUG
 #else
-#include "spatial-tree/quadtree.hh"
+#include "spatial.h"
 #endif
 
 #include <gtest/gtest.h>
@@ -12,15 +13,60 @@
 #include <unordered_set>
 #include <vector>
 
-TEST(TestQuadTree, ManyValueTypes) {
-    st::QuadTree<int>         integer;
-    st::QuadTree<float>       floating;
-    st::QuadTree<std::string> str;
-    st::QuadTree<std::vector<std::string>> vec;
-    st::QuadTree nothing;
+TEST(TestEuclide, TestEuclideanDistanceDouble) {
+    using namespace st::internal;
+    ASSERT_DOUBLE_EQ(euclidean_distance_squared<double>(0.0, 0.0), 0.0);
+    ASSERT_DOUBLE_EQ(euclidean_distance_squared<double>(0.0, 1.0), 1.0);
+    ASSERT_DOUBLE_EQ(euclidean_distance_squared<double>(0.0, 2.0), 4.0);
+    ASSERT_DOUBLE_EQ(euclidean_distance_squared<double>(0.0, 0.0, 0.0, 0.0), 0.0);
+    ASSERT_DOUBLE_EQ(euclidean_distance_squared<double>(0.0, 0.0, 0.0, 1.0), 1.0);
+    ASSERT_DOUBLE_EQ(euclidean_distance_squared<double>(0.0, 3.0, 0.0, 4.0), 25.0);
+    ASSERT_DOUBLE_EQ(euclidean_distance_squared<double>(1.0, 4.0, 10.0, 14.0), 25.0);
 }
 
-TEST(TestQuadTree, UniqueInsertions) {
+TEST(TestEuclide, TestEuclideanDistanceInt) {
+    using namespace st::internal;
+    ASSERT_EQ(euclidean_distance_squared<int>(0, 0), 0);
+    ASSERT_EQ(euclidean_distance_squared<int>(0, 1), 1);
+    ASSERT_EQ(euclidean_distance_squared<int>(0, 2), 4);
+    ASSERT_EQ(euclidean_distance_squared<int>(0, 0, 0, 0), 0);
+    ASSERT_EQ(euclidean_distance_squared<int>(0, 0, 0, 1), 1);
+    ASSERT_EQ(euclidean_distance_squared<int>(0, 3, 0, 4), 25);
+    ASSERT_EQ(euclidean_distance_squared<int>(1, 4, 10, 14), 25);
+}
+
+TEST(TestEuclide, TestEuclideanDistanceUnsigned) {
+    using namespace st::internal;
+    ASSERT_EQ(euclidean_distance_squared<unsigned>(0, 0), 0);
+    ASSERT_EQ(euclidean_distance_squared<unsigned>(0, 1), 1);
+    ASSERT_EQ(euclidean_distance_squared<unsigned>(0, 2), 4);
+    ASSERT_EQ(euclidean_distance_squared<unsigned>(0, 0, 0, 0), 0);
+    ASSERT_EQ(euclidean_distance_squared<unsigned>(0, 0, 0, 1), 1);
+    ASSERT_EQ(euclidean_distance_squared<unsigned>(0, 3, 0, 4), 25);
+    ASSERT_EQ(euclidean_distance_squared<unsigned>(1, 4, 10, 14), 25);
+}
+
+TEST(TestEuclide, TestAbsDiff) {
+    using namespace st::internal;
+    ASSERT_EQ(absdiff<unsigned>(0, 2), 2);
+    ASSERT_EQ(absdiff<unsigned>(2, 0), 2);
+    ASSERT_EQ(absdiff<int>(0, 2), 2);
+    ASSERT_EQ(absdiff<int>(0, -2), 2);
+    ASSERT_EQ(absdiff<int>(-2, 0), 2);
+    ASSERT_EQ(absdiff<double>(0, 2), 2);
+    ASSERT_EQ(absdiff<double>(0, -2), 2);
+    ASSERT_EQ(absdiff<double>(-2, 0), 2);
+}
+
+TEST(TestSpatialTree, ManyValueTypes) {
+    st::internal::spatial_tree<int>                      integer;
+    st::internal::spatial_tree<float>                    floating;
+    st::internal::spatial_tree<std::string>              str;
+    st::internal::spatial_tree<std::vector<std::string>> vec;
+    st::internal::spatial_tree                           nothing;
+}
+
+TEST(TestSpatialTree, UniqueInsertions) {
     const auto typed_test = [&]<typename CoordT>() {
         const std::vector<uint64_t> test_sizes = {1, 2, 3, 7, 10, 100, 9999, 10000};
         for (uint64_t test_size : test_sizes) {
@@ -36,23 +82,23 @@ TEST(TestQuadTree, UniqueInsertions) {
                 ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
                 tree.clear();
             };
-            CoordT                        bound = test_size;
-            const st::BoundingBox<CoordT> bounds(-bound, bound, bound, -bound);
+            CoordT                         bound = test_size;
+            const st::bounding_box<CoordT> bounds(-bound, bound, bound, -bound);
 
-            st::QuadTree<int, CoordT> bounded(bounds);
-            inner_test.template       operator()<st::QuadTree<int, CoordT>>(bounded);
+            st::internal::spatial_tree<int, CoordT> bounded(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
 
-            st::QuadTree<int, CoordT> unbounded;
-            inner_test.template       operator()<st::QuadTree<int, CoordT>>(unbounded);
+            st::internal::spatial_tree<int, CoordT> unbounded;
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
 
-            st::QuadTree<int, CoordT, 1> small_size(bounds);
-            inner_test.template          operator()<st::QuadTree<int, CoordT, 1>>(small_size);
+            st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
 
-            st::QuadTree<int, CoordT, 16> large_size(bounds);
-            inner_test.template           operator()<st::QuadTree<int, CoordT, 16>>(large_size);
+            st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
 
-            st::QuadTree<int, CoordT, 7> odd_size(bounds);
-            inner_test.template          operator()<st::QuadTree<int, CoordT, 7>>(odd_size);
+            st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
         }
     };
     typed_test.operator()<float>();
@@ -60,7 +106,7 @@ TEST(TestQuadTree, UniqueInsertions) {
     typed_test.operator()<int>();
 }
 
-TEST(TestQuadTree, RandomInsertions) {
+TEST(TestSpatialTree, RandomInsertions) {
     static constexpr int DISTRIBUTION_BEG = -10000;
     static constexpr int DISTRIBUTION_END = 10000;
     static constexpr int RANGE_SIZE = DISTRIBUTION_END - DISTRIBUTION_BEG + 1;
@@ -88,23 +134,23 @@ TEST(TestQuadTree, RandomInsertions) {
                 tree.clear();
             }
         };
-        const st::BoundingBox<CoordT> bounds(
+        const st::bounding_box<CoordT> bounds(
             DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG);
 
-        st::QuadTree<int, CoordT> bounded(bounds);
-        inner_test.template       operator()<st::QuadTree<int, CoordT>>(bounded);
+        st::internal::spatial_tree<int, CoordT> bounded(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
 
-        st::QuadTree<int, CoordT> unbounded;
-        inner_test.template       operator()<st::QuadTree<int, CoordT>>(unbounded);
+        st::internal::spatial_tree<int, CoordT> unbounded;
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
 
-        st::QuadTree<int, CoordT, 1> small_size(bounds);
-        inner_test.template          operator()<st::QuadTree<int, CoordT, 1>>(small_size);
+        st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
 
-        st::QuadTree<int, CoordT, 16> large_size(bounds);
-        inner_test.template           operator()<st::QuadTree<int, CoordT, 16>>(large_size);
+        st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
 
-        st::QuadTree<int, CoordT, 7> odd_size(bounds);
-        inner_test.template          operator()<st::QuadTree<int, CoordT, 7>>(odd_size);
+        st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
     };
 
     typed_test.operator()<float>();
@@ -112,7 +158,7 @@ TEST(TestQuadTree, RandomInsertions) {
     typed_test.operator()<int>();
 }
 
-TEST(TestQuadTree, IteratorCoverage) {
+TEST(TestSpatialTree, IteratorCoverage) {
     const std::vector<uint64_t> test_sizes = {1, 2, 3, 7, 10, 100, 9999, 10000};
     const auto                  typed_test = [&]<typename CoordT>() {
         for (int test_size : test_sizes) {
@@ -125,22 +171,22 @@ TEST(TestQuadTree, IteratorCoverage) {
                 ASSERT_EQ(tree.size(), test_size);
                 ASSERT_EQ(std::distance(tree.begin(), tree.end()), test_size);
             };
-            const st::BoundingBox<CoordT> bounds(-test_size, test_size, test_size, -test_size);
+            const st::bounding_box<CoordT> bounds(-test_size, test_size, test_size, -test_size);
 
-            st::QuadTree<int, CoordT> bounded(bounds);
-            inner_test.template       operator()<st::QuadTree<int, CoordT>>(bounded);
+            st::internal::spatial_tree<int, CoordT> bounded(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
 
-            st::QuadTree<int, CoordT> unbounded;
-            inner_test.template       operator()<st::QuadTree<int, CoordT>>(unbounded);
+            st::internal::spatial_tree<int, CoordT> unbounded;
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
 
-            st::QuadTree<int, CoordT, 1> small_size(bounds);
-            inner_test.template          operator()<st::QuadTree<int, CoordT, 1>>(small_size);
+            st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
 
-            st::QuadTree<int, CoordT, 16> large_size(bounds);
-            inner_test.template           operator()<st::QuadTree<int, CoordT, 16>>(large_size);
+            st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
 
-            st::QuadTree<int, CoordT, 7> odd_size(bounds);
-            inner_test.template          operator()<st::QuadTree<int, CoordT, 7>>(odd_size);
+            st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
         }
     };
 
@@ -149,7 +195,7 @@ TEST(TestQuadTree, IteratorCoverage) {
     typed_test.operator()<int>();
 }
 
-TEST(TestQuadTree, SingleFind) {
+TEST(TestSpatialTree, SingleFind) {
     const std::vector<uint64_t> test_sizes = {1, 2, 3, 7, 10, 100, 9999, 10000};
     const auto                  typed_test = [&]<typename CoordT>() {
         for (int test_size : test_sizes) {
@@ -165,22 +211,22 @@ TEST(TestQuadTree, SingleFind) {
                     ASSERT_NE(tree.find(i, i), tree.end());
                 }
             };
-            const st::BoundingBox<CoordT> bounds(-test_size, test_size, test_size, -test_size);
+            const st::bounding_box<CoordT> bounds(-test_size, test_size, test_size, -test_size);
 
-            st::QuadTree<int, CoordT> bounded(bounds);
-            inner_test.template       operator()<st::QuadTree<int, CoordT>>(bounded);
+            st::internal::spatial_tree<int, CoordT> bounded(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
 
-            st::QuadTree<int, CoordT> unbounded;
-            inner_test.template       operator()<st::QuadTree<int, CoordT>>(unbounded);
+            st::internal::spatial_tree<int, CoordT> unbounded;
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
 
-            st::QuadTree<int, CoordT, 1> small_size(bounds);
-            inner_test.template          operator()<st::QuadTree<int, CoordT, 1>>(small_size);
+            st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
 
-            st::QuadTree<int, CoordT, 16> large_size(bounds);
-            inner_test.template           operator()<st::QuadTree<int, CoordT, 16>>(large_size);
+            st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
 
-            st::QuadTree<int, CoordT, 7> odd_size(bounds);
-            inner_test.template          operator()<st::QuadTree<int, CoordT, 7>>(odd_size);
+            st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
         }
     };
 
@@ -189,7 +235,7 @@ TEST(TestQuadTree, SingleFind) {
     typed_test.operator()<int>();
 }
 
-TEST(TestQuadTree, BBoxFind) {
+TEST(TestSpatialTree, BBoxFind) {
     static constexpr int DISTRIBUTION_BEG = -10000;
     static constexpr int DISTRIBUTION_END = 10000;
     static constexpr int RANGE_SIZE = DISTRIBUTION_END - DISTRIBUTION_BEG + 1;
@@ -222,11 +268,11 @@ TEST(TestQuadTree, BBoxFind) {
                     const CoordT x_stop = distribution_stop_x(device);
                     const CoordT y_stop = distribution_stop_y(device);
 
-                    const st::BoundingBox<CoordT> bbox = {x_start, y_stop, x_stop, y_start};
+                    const st::bounding_box<CoordT> bbox = {x_start, y_stop, x_stop, y_start};
 
                     int counter = std::count_if(tree.begin(), tree.end(), [&](auto it) {
                         const auto [x, y, val] = it;
-                        return st::is_inside_bounding_box(x, y, bbox);
+                        return st::internal::is_inside_bounding_box(x, y, bbox);
                     });
 
                     int rcounter = 0;
@@ -236,23 +282,23 @@ TEST(TestQuadTree, BBoxFind) {
                 }
             }
         };
-        const st::BoundingBox<CoordT> bounds(
+        const st::bounding_box<CoordT> bounds(
             DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG);
 
-        st::QuadTree<int, CoordT> bounded(bounds);
-        inner_test.template       operator()<st::QuadTree<int, CoordT>>(bounded);
+        st::internal::spatial_tree<int, CoordT> bounded(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
 
-        st::QuadTree<int, CoordT> unbounded;
-        inner_test.template       operator()<st::QuadTree<int, CoordT>>(unbounded);
+        st::internal::spatial_tree<int, CoordT> unbounded;
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
 
-        st::QuadTree<int, CoordT, 1> small_size(bounds);
-        inner_test.template          operator()<st::QuadTree<int, CoordT, 1>>(small_size);
+        st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
 
-        st::QuadTree<int, CoordT, 16> large_size(bounds);
-        inner_test.template           operator()<st::QuadTree<int, CoordT, 16>>(large_size);
+        st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
 
-        st::QuadTree<int, CoordT, 7> odd_size(bounds);
-        inner_test.template          operator()<st::QuadTree<int, CoordT, 7>>(odd_size);
+        st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
     };
 
     typed_test.operator()<float>();
@@ -260,7 +306,7 @@ TEST(TestQuadTree, BBoxFind) {
     typed_test.operator()<int>();
 }
 
-TEST(TestQuadTree, Nearest) {
+TEST(TestSpatialTree, Nearest) {
     static constexpr int DISTRIBUTION_BEG = -10000;
     static constexpr int DISTRIBUTION_END = 10000;
     static constexpr int RANGE_SIZE = DISTRIBUTION_END - DISTRIBUTION_BEG + 1;
@@ -287,41 +333,41 @@ TEST(TestQuadTree, Nearest) {
                             const auto [x1, y1, val1] = lhs;
                             const auto [x2, y2, val2] = rhs;
 
-                            return st::euclidean_distance_squared(x1, x_, y1, y_) <
-                                   st::euclidean_distance_squared(x2, x_, y2, y_);
+                            return st::internal::euclidean_distance_squared(x1, x_, y1, y_) <
+                                   st::internal::euclidean_distance_squared(x2, x_, y2, y_);
                         });
                     const CoordT distance1 =
-                        st::euclidean_distance_squared(x_, nearest_x1, y_, nearest_y1);
+                        st::internal::euclidean_distance_squared(x_, nearest_x1, y_, nearest_y1);
 
                     // TODO: Check that it found them all.
                     const auto nearest_points = tree.nearest(x_, y_);
                     ASSERT_TRUE(
                         std::all_of(nearest_points.begin(), nearest_points.end(), [&](auto it) {
                             const auto [nearest_x2, nearest_y2, nearest_val2] = *it;
-                            const CoordT distance2 =
-                                st::euclidean_distance_squared(x_, nearest_x2, y_, nearest_y2);
+                            const CoordT distance2 = st::internal::euclidean_distance_squared(
+                                x_, nearest_x2, y_, nearest_y2);
                             return distance2 == distance1;
                         }));
                 }
             }
         };
-        const st::BoundingBox<CoordT> bounds(
+        const st::bounding_box<CoordT> bounds(
             DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG);
 
-        st::QuadTree<int, CoordT> bounded(bounds);
-        inner_test.template       operator()<st::QuadTree<int, CoordT>>(bounded);
+        st::internal::spatial_tree<int, CoordT> bounded(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
 
-        st::QuadTree<int, CoordT> unbounded;
-        inner_test.template       operator()<st::QuadTree<int, CoordT>>(unbounded);
+        st::internal::spatial_tree<int, CoordT> unbounded;
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
 
-        st::QuadTree<int, CoordT, 1> small_size(bounds);
-        inner_test.template          operator()<st::QuadTree<int, CoordT, 1>>(small_size);
+        st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
 
-        st::QuadTree<int, CoordT, 16> large_size(bounds);
-        inner_test.template           operator()<st::QuadTree<int, CoordT, 16>>(large_size);
+        st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
 
-        st::QuadTree<int, CoordT, 7> odd_size(bounds);
-        inner_test.template          operator()<st::QuadTree<int, CoordT, 7>>(odd_size);
+        st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
     };
 
     typed_test.operator()<float>();
