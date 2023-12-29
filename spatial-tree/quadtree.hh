@@ -14,7 +14,7 @@
 #include "intervals.hh"
 
 namespace st {
-template <typename StorageType, typename CoordinateType = int, uint8_t MAXIMUM_NODE_SIZE = 32>
+template <typename StorageType = void, typename CoordinateType = int, uint8_t MAXIMUM_NODE_SIZE = 32>
 class QuadTree {
 public:
     static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
@@ -151,14 +151,25 @@ private:
         enum _Quadrant { NE = 0, NW = 1, SW = 2, SE = 3 };
     };
 
-    struct NodeContent {
+    struct NodeContentNonVoid {
         CoordinateType x;
         CoordinateType y;
         StorageType    storage;
 
         template <typename... Args>
-        __always_inline NodeContent(CoordinateType x_, CoordinateType y_, Args &&...args)
+        __always_inline NodeContentNonVoid(CoordinateType x_, CoordinateType y_, Args &&...args)
             : x(x_), y(y_), storage(std::forward<Args>(args)...) {}
+    };
+
+    struct NodeContentVoid {
+        CoordinateType x;
+        CoordinateType y;
+
+        __always_inline NodeContentVoid(CoordinateType x_, CoordinateType y_) : x(x_), y(y_) {}
+    };
+
+    struct NodeContent
+        : std::conditional<std::is_void_v<StorageType>, NodeContentVoid, NodeContentNonVoid>::type {
     };
 
     struct NodeLeaves {
@@ -183,10 +194,12 @@ private:
             }
         }
         __always_inline ~Node() {
-            if (is_a_leaf()) {
-                UNROLL_4
-                for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
-                    leaves.items[i].storage.~StorageType();
+            if constexpr (!std::is_void_v<StorageType>) {
+                if (is_a_leaf()) {
+                    UNROLL_4
+                    for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
+                        leaves.items[i].storage.~StorageType();
+                    }
                 }
             }
         }
@@ -198,17 +211,20 @@ private:
         }
     };
 
-    __always_inline std::tuple<CoordinateType, CoordinateType, const StorageType &> operator()(
-        uint64_t node_index, uint64_t item_index) const {
+    __always_inline auto operator()(uint64_t node_index, uint64_t item_index) const {
         assert(node_index < nodes_.size());
         const Node &node = nodes_[node_index];
 
         assert(node.is_a_leaf());
         assert(item_index < node.leaves.size);
 
-        const auto &[x, y, storage] = node.leaves.items[item_index];
-
-        return std::tuple<CoordinateType, CoordinateType, const StorageType &>(x, y, storage);
+        if constexpr (std::is_void_v<StorageType>) {
+            const auto [x, y] = node.leaves.items[item_index];
+            return std::tuple<CoordinateType, CoordinateType>(x, y);
+        } else {
+            const auto &[x, y, storage] = node.leaves.items[item_index];
+            return std::tuple<CoordinateType, CoordinateType, const StorageType &>(x, y, storage);
+        }
     }
 
     static __always_inline auto belongs_to_quadrant(const BoundingBox<CoordinateType> &boundaries,
@@ -279,7 +295,8 @@ private:
 
         int64_t item_index = 0;
         for (uint64_t i = 0; i < node.leaves.size; ++i) {
-            const auto &[x_, y_, storage] = node.leaves.items[i];
+            auto x_ = node.leaves.items[i].x;
+            auto y_ = node.leaves.items[i].y;
             item_index += (i + 1) * (x == x_ && y == y_);
         }
 
@@ -289,8 +306,25 @@ private:
 
         const bool node_is_full = node.leaves.size == MAXIMUM_NODE_SIZE;
         if (!node_is_full) {
-            node.leaves.items[node.leaves.size++] =
-                std::move(NodeContent(x, y, std::forward<Args>(args)...));
+            node.leaves.items[node.leaves.size].x = x;
+            node.leaves.items[node.leaves.size].y = y;
+            if constexpr (!std::is_void_v<StorageType>) {
+#if defined(CLANG_COMPILER)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmaybe-uninitialized"
+#elif defined(GNU_COMPILER)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+                node.leaves.items[node.leaves.size].storage =
+                    std::move(StorageType(std::forward<Args>(args)...));
+#if defined(CLANG_COMPILER)
+#pragma clang diagnostic pop
+#elif defined(GNU_COMPILER)
+#pragma GCC diagnostic pop
+#endif
+            }
+            ++node.leaves.size;
             ++size_;
             return {Iterator(this, node_index, node.leaves.size - 1), true};
         }
@@ -303,8 +337,14 @@ private:
 
         UNROLL_4
         for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
-            const auto [x_, y_, storage] = node_as_branch.leaves.items[i];
-            emplace_recursively_helper(new_children, boundaries, x_, y_, storage);
+            auto x_ = node_as_branch.leaves.items[i].x;
+            auto y_ = node_as_branch.leaves.items[i].y;
+            if constexpr (std::is_void_v<StorageType>) {
+                emplace_recursively_helper(new_children, boundaries, x_, y_);
+            } else {
+                emplace_recursively_helper(
+                    new_children, boundaries, x_, y_, node_as_branch.leaves.items[i].storage);
+            }
         }
 
         node_as_branch.branch = true;

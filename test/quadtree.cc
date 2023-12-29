@@ -17,8 +17,7 @@ TEST(TestQuadTree, ManyValueTypes) {
     st::QuadTree<float>       floating;
     st::QuadTree<std::string> str;
     st::QuadTree<std::vector<std::string>> vec;
-    /// TODO
-    // st::QuadTree<void> nothing;
+    st::QuadTree nothing;
 }
 
 TEST(TestQuadTree, UniqueInsertions) {
