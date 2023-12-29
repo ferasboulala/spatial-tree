@@ -197,7 +197,7 @@ public:
             assert(node_index_ < tree_->nodes_.size());
 
             const tree_node *node = &tree_->nodes_[node_index_];
-            if (node->is_a_leaf() && ++item_index_ < node->leaves.size) {
+            if (node->is_a_leaf() && ++item_index_ < node->leaf.size) {
                 return *this;
             }
 
@@ -205,7 +205,7 @@ public:
                 ++node_index_;
                 node = &tree_->nodes_[node_index_];
                 item_index_ = 0;
-            } while ((node->is_a_branch() || !node->leaves.size) &&
+            } while ((node->is_a_branch() || !node->leaf.size) &&
                      node_index_ < tree_->nodes_.size());
 
             if (node_index_ == tree_->nodes_.size()) end();
@@ -240,7 +240,7 @@ public:
 
         iterator         ret(this, 0, 0);
         const tree_node &first_node = nodes_.front();
-        if (first_node.is_a_leaf() && first_node.leaves.size) return ret;
+        if (first_node.is_a_leaf() && first_node.leaf.size) return ret;
 
         return ++ret;
     }
@@ -294,45 +294,49 @@ private:
         __always_inline tree_node_no_storage(CoordinateType x_, CoordinateType y_) : x(x_), y(y_) {}
     };
 
-    struct tree_nodeContent : std::conditional<std::is_void_v<StorageType>,
-                                               tree_node_no_storage,
-                                               tree_node_with_storage>::type {};
+    struct tree_node_storage : std::conditional<std::is_void_v<StorageType>,
+                                                tree_node_no_storage,
+                                                tree_node_with_storage>::type {};
 
-    struct tree_nodeLeaves {
-        std::array<tree_nodeContent, MAXIMUM_NODE_SIZE> items;
-        uint8_t                                         size;
+    struct tree_node_leaf {
+        std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
+        uint8_t                                          size;
+    };
+
+    struct tree_node_branch {
+        std::array<uint64_t, 4> children;
     };
 
     struct tree_node {
         static constexpr uint64_t NO_INDEX = std::numeric_limits<uint64_t>::max();
         union {
-            tree_nodeLeaves         leaves;
-            std::array<uint64_t, 4> children;
+            tree_node_leaf   leaf;
+            tree_node_branch branch;
         };
-        bool branch;
+        bool is_branch;
 
         __always_inline tree_node() { reset(); }
-        __always_inline tree_node(tree_node &&other) : branch(other.branch) {
+        __always_inline tree_node(tree_node &&other) : is_branch(other.is_branch) {
             if (is_a_branch()) {
-                children = std::move(other.children);
+                branch= std::move(other.branch);
             } else {
-                leaves = std::move(other.leaves);
+                leaf = std::move(other.leaf);
             }
         }
         __always_inline ~tree_node() {
             if constexpr (!std::is_void_v<StorageType>) {
                 if (is_a_leaf()) {
                     __unroll_4 for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
-                        leaves.items[i].storage.~StorageType();
+                        leaf.items[i].storage.~StorageType();
                     }
                 }
             }
         }
-        __always_inline bool is_a_branch() const { return branch; }
+        __always_inline bool is_a_branch() const { return is_branch; }
         __always_inline bool is_a_leaf() const { return !is_a_branch(); }
         __always_inline void reset() {
-            leaves.size = 0;
-            branch = false;
+            leaf.size = 0;
+            is_branch = false;
         }
     };
 
@@ -341,13 +345,13 @@ private:
         const tree_node &node = nodes_[node_index];
 
         assert(node.is_a_leaf());
-        assert(item_index < node.leaves.size);
+        assert(item_index < node.leaf.size);
 
         if constexpr (std::is_void_v<StorageType>) {
-            const auto [x, y] = node.leaves.items[item_index];
+            const auto [x, y] = node.leaf.items[item_index];
             return std::tuple<CoordinateType, CoordinateType>(x, y);
         } else {
-            const auto &[x, y, storage] = node.leaves.items[item_index];
+            const auto &[x, y, storage] = node.leaf.items[item_index];
             return std::tuple<CoordinateType, CoordinateType, const StorageType &>(x, y, storage);
         }
     }
@@ -416,13 +420,13 @@ private:
 
         if (node.is_a_branch()) {
             return emplace_recursively_helper(
-                node.children, boundaries, x, y, std::forward<Args>(args)...);
+                node.branch.children, boundaries, x, y, std::forward<Args>(args)...);
         }
 
         int64_t item_index = 0;
-        for (uint64_t i = 0; i < node.leaves.size; ++i) {
-            auto x_ = node.leaves.items[i].x;
-            auto y_ = node.leaves.items[i].y;
+        for (uint64_t i = 0; i < node.leaf.size; ++i) {
+            auto x_ = node.leaf.items[i].x;
+            auto y_ = node.leaf.items[i].y;
             item_index += (i + 1) * (x == x_ && y == y_);
         }
 
@@ -430,10 +434,10 @@ private:
             return {iterator(this, node_index, item_index - 1), false};
         }
 
-        const bool node_is_full = node.leaves.size == MAXIMUM_NODE_SIZE;
+        const bool node_is_full = node.leaf.size == MAXIMUM_NODE_SIZE;
         if (!node_is_full) {
-            node.leaves.items[node.leaves.size].x = x;
-            node.leaves.items[node.leaves.size].y = y;
+            node.leaf.items[node.leaf.size].x = x;
+            node.leaf.items[node.leaf.size].y = y;
             if constexpr (!std::is_void_v<StorageType>) {
 #if defined(__clang_compiler)
 #pragma clang diagnostic push
@@ -442,7 +446,7 @@ private:
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
-                node.leaves.items[node.leaves.size].storage =
+                node.leaf.items[node.leaf.size].storage =
                     std::move(StorageType(std::forward<Args>(args)...));
 #if defined(__clang_compiler)
 #pragma clang diagnostic pop
@@ -450,9 +454,9 @@ private:
 #pragma GCC diagnostic pop
 #endif
             }
-            ++node.leaves.size;
+            ++node.leaf.size;
             ++size_;
-            return {iterator(this, node_index, node.leaves.size - 1), true};
+            return {iterator(this, node_index, node.leaf.size - 1), true};
         }
 
         std::array<uint64_t, 4> new_children;
@@ -462,18 +466,18 @@ private:
         tree_node &node_as_branch = nodes_[node_index];
 
         __unroll_4 for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
-            auto x_ = node_as_branch.leaves.items[i].x;
-            auto y_ = node_as_branch.leaves.items[i].y;
+            auto x_ = node_as_branch.leaf.items[i].x;
+            auto y_ = node_as_branch.leaf.items[i].y;
             if constexpr (std::is_void_v<StorageType>) {
                 emplace_recursively_helper(new_children, boundaries, x_, y_);
             } else {
                 emplace_recursively_helper(
-                    new_children, boundaries, x_, y_, node_as_branch.leaves.items[i].storage);
+                    new_children, boundaries, x_, y_, node_as_branch.leaf.items[i].storage);
             }
         }
 
-        node_as_branch.branch = true;
-        node_as_branch.children = new_children;
+        node_as_branch.is_branch = true;
+        node_as_branch.branch.children = new_children;
         size_ -= MAXIMUM_NODE_SIZE;
 
         return emplace_recursively_helper(
@@ -488,8 +492,8 @@ private:
 
         const tree_node &node = nodes_[node_index];
         if (node.is_a_leaf()) {
-            for (uint64_t i = 0; i < node.leaves.size; ++i) {
-                if (x == node.leaves.items[i].x && y == node.leaves.items[i].y) {
+            for (uint64_t i = 0; i < node.leaf.size; ++i) {
+                if (x == node.leaf.items[i].x && y == node.leaf.items[i].y) {
                     return iterator(this, node_index, i);
                 }
             }
@@ -497,8 +501,10 @@ private:
         }
 
         const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
-        return find_recursively(
-            x, y, compute_new_boundaries(selected_quad, boundaries), node.children[selected_quad]);
+        return find_recursively(x,
+                                y,
+                                compute_new_boundaries(selected_quad, boundaries),
+                                node.branch.children[selected_quad]);
     }
 
     void find_recursively(const bounding_box<CoordinateType> &bbox,
@@ -509,8 +515,8 @@ private:
 
         const tree_node &node = nodes_[node_index];
         if (node.is_a_leaf()) {
-            for (uint64_t i = 0; i < node.leaves.size; ++i) {
-                if (is_inside_bounding_box(node.leaves.items[i].x, node.leaves.items[i].y, bbox)) {
+            for (uint64_t i = 0; i < node.leaf.size; ++i) {
+                if (is_inside_bounding_box(node.leaf.items[i].x, node.leaf.items[i].y, bbox)) {
                     func(iterator(this, node_index, i));
                 }
             }
@@ -520,7 +526,7 @@ private:
         __unroll_4 for (uint64_t i = 0; i < 4; ++i) {
             auto new_boundaries = compute_new_boundaries(i, boundaries);
             if (bounding_boxes_overlap(bbox, new_boundaries)) {
-                find_recursively(bbox, new_boundaries, func, node.children[i]);
+                find_recursively(bbox, new_boundaries, func, node.branch.children[i]);
             }
         }
     }
@@ -546,9 +552,9 @@ private:
         const tree_node &node = nodes_[node_index];
 
         if (node.is_a_leaf()) {
-            for (uint64_t i = 0; i < node.leaves.size; ++i) {
-                auto distance = euclidean_distance_squared(
-                    x, node.leaves.items[i].x, y, node.leaves.items[i].y);
+            for (uint64_t i = 0; i < node.leaf.size; ++i) {
+                auto distance =
+                    euclidean_distance_squared(x, node.leaf.items[i].x, y, node.leaf.items[i].y);
                 if (distance < nearest_distance_squared) {
                     results.clear();
                     nearest_distance_squared = distance;
@@ -561,7 +567,7 @@ private:
         }
 
         const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
-        nearest_recursively(node.children[selected_quad],
+        nearest_recursively(node.branch.children[selected_quad],
                             compute_new_boundaries(selected_quad, boundaries),
                             x,
                             y,
@@ -573,8 +579,12 @@ private:
             const auto new_boundaries = compute_new_boundaries(quad, boundaries);
             if (smallest_distance_from_bounding_box(new_boundaries, x, y) <=
                 nearest_distance_squared) {
-                nearest_recursively(
-                    node.children[quad], new_boundaries, x, y, nearest_distance_squared, results);
+                nearest_recursively(node.branch.children[quad],
+                                    new_boundaries,
+                                    x,
+                                    y,
+                                    nearest_distance_squared,
+                                    results);
             }
         }
     }
