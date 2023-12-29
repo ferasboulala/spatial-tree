@@ -19,4 +19,6 @@
 #define UNROLL(factor) DO_PRAGMA("clang loop unroll_count(" #factor ")")
 #endif
 
-// TODO: Avoid the use of __always_inline and other aliases. Make that platform independent.
+#ifndef __always_inline
+#define __always_inline __inline __attribute__ ((__always_inline__))
+#endif
