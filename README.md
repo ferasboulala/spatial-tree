@@ -1,2 +1,2 @@
 # spatial
-Spatial partitioning data structure (a Quadtree in this case) built for low latency dynamic use cases. 
+Header only spatial partitioning data structure (a Quadtree in this case) built for low latency dynamic use cases. 
