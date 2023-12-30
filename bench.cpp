@@ -66,6 +66,36 @@ void benchmark_insertions(benchmark::State &state, TreeType &tree) {
 }
 
 template <typename CoordT, typename TreeType>
+void benchmark_deletions(benchmark::State &state, TreeType &tree) {
+    static_assert(std::is_signed_v<CoordT>);
+
+    static constexpr CoordT BEG = BEG_TYPELESS;
+    static constexpr CoordT END = END_TYPELESS;
+
+    const uint64_t test_size = state.range(0);
+    const auto     points = generate_points(BEG, END, test_size);
+
+    for (auto _ : state) {
+        for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = points[i];
+            tree.emplace(x, y);
+        }
+    }
+
+    const auto other_points = generate_points(BEG, END, test_size);
+
+    for (auto _ : state) {
+        for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = points[i];
+            auto [x_, y_] = other_points[i];
+            tree.erase(x, y);
+            tree.erase(x_, y_);
+        }
+    }
+    state.SetItemsProcessed(test_size * 2 * state.iterations());
+}
+
+template <typename CoordT, typename TreeType>
 void benchmark_find(benchmark::State &state, TreeType &tree) {
     static_assert(std::is_signed_v<CoordT>);
 
@@ -89,7 +119,7 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
     }
 
     static constexpr uint64_t n_bounding_boxes = 1 << 16;
-    const auto bounding_boxes_points = generate_points(BEG, END, n_bounding_boxes);
+    const auto                bounding_boxes_points = generate_points(BEG, END, n_bounding_boxes);
     std::vector<st::bounding_box<CoordT>> bounding_boxes;
     bounding_boxes.reserve(n_bounding_boxes);
     for (uint64_t i = 0; i < n_bounding_boxes; ++i) {
@@ -172,8 +202,7 @@ template <typename StorageType, typename CoordinateType>
 class hash_table_oracle {
 private:
     struct HashFunc {
-        inline size_t
-        operator()(const std::pair<CoordinateType, CoordinateType> &coords) const {
+        inline size_t operator()(const std::pair<CoordinateType, CoordinateType> &coords) const {
             auto [x, y] = coords;
 
             size_t seed = 0;
@@ -196,6 +225,10 @@ public:
                               StorageType(std::forward<Args>(args)...));
     }
 
+    inline bool erase(CoordinateType x, CoordinateType y) {
+        return table_.erase(std::pair<CoordinateType, CoordinateType>{x, y});
+    }
+
     void find(
         const st::bounding_box<CoordinateType> &bbox,
         std::function<void(std::pair<const std::pair<CoordinateType, CoordinateType>, StorageType>)>
@@ -208,9 +241,7 @@ public:
         }
     }
 
-    inline auto find(CoordinateType x, CoordinateType y) const {
-        return table_.find({x, y});
-    }
+    inline auto find(CoordinateType x, CoordinateType y) const { return table_.find({x, y}); }
 
     auto nearest(CoordinateType x, CoordinateType y) const {
         std::vector<std::pair<const std::pair<CoordinateType, CoordinateType>, StorageType>>
@@ -235,6 +266,11 @@ public:
     static void insertions(benchmark::State &state) {
         auto tree = hash_table_oracle<VALUE_TYPE, CoordinateType>();
         benchmark_insertions<CoordinateType>(state, tree);
+    }
+
+    static void deletions(benchmark::State &state) {
+        auto tree = hash_table_oracle<VALUE_TYPE, CoordinateType>();
+        benchmark_deletions<CoordinateType>(state, tree);
     }
 
     static void find(benchmark::State &state) {
@@ -268,6 +304,15 @@ void insertions(benchmark::State &state) {
 }
 
 template <typename CoordT>
+void deletions(benchmark::State &state) {
+    static constexpr CoordT BEG = BEG_TYPELESS;
+    static constexpr CoordT END = END_TYPELESS;
+
+    auto tree = st::internal::spatial_tree<VALUE_TYPE, CoordT, MAX_NODE_SIZE>({BEG, END, END, BEG});
+    benchmark_deletions<CoordT>(state, tree);
+}
+
+template <typename CoordT>
 void find(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
@@ -297,11 +342,13 @@ void nearest(benchmark::State &state) {
 using COORD_TYPE = float;
 
 BENCHMARK(insertions<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(deletions<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(find<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(find_single<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(nearest<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::insertions)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(hash_table_oracle<int, COORD_TYPE>::deletions)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find_single)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::nearest)->RangeMultiplier(2)->Range(LOW, HIGH);

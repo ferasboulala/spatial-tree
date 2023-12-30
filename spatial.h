@@ -195,6 +195,8 @@ public:
             assert(node_index_ < tree_->nodes_.size());
 
             const tree_node *node = &tree_->nodes_[node_index_];
+            // TODO: Make the is_leaf member variable an enum for the freed case to skip 4 leaves at
+            // a time.
             if (node->is_a_leaf() && ++item_index_ < node->leaf.size) {
                 return *this;
             }
@@ -250,6 +252,10 @@ public:
         return emplace_recursively(0, boundaries_, x, y, std::forward<Args>(args)...);
     }
 
+    inline bool erase(CoordinateType x, CoordinateType y) {
+        return erase_recursively(0, boundaries_, x, y);
+    }
+
     std::vector<iterator> nearest(CoordinateType x, CoordinateType y) const {
         CoordinateType        nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
         std::vector<iterator> results;
@@ -300,7 +306,8 @@ private:
     };
 
     struct tree_node_branch {
-        std::array<uint64_t, 4> children;
+        // Children are adjacent in memory.
+        uint64_t index_of_first_child;
     };
 
     struct tree_node {
@@ -423,7 +430,7 @@ private:
 
     template <typename... Args>
     inline std::pair<iterator, bool> emplace_recursively_helper(
-        const std::array<uint64_t, 4>      &children,
+        uint64_t                            index_of_first_child,
         const bounding_box<CoordinateType> &boundaries,
         CoordinateType                      x,
         CoordinateType                      y,
@@ -431,8 +438,11 @@ private:
         const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
         const auto new_boundaries = compute_new_boundaries(selected_quad, boundaries);
 
-        return emplace_recursively(
-            children[selected_quad], new_boundaries, x, y, std::forward<Args>(args)...);
+        return emplace_recursively(index_of_first_child + selected_quad,
+                                   new_boundaries,
+                                   x,
+                                   y,
+                                   std::forward<Args>(args)...);
     }
 
     template <typename... Args>
@@ -448,7 +458,7 @@ private:
 
         if (node.is_a_branch()) {
             return emplace_recursively_helper(
-                node.branch.children, boundaries, x, y, std::forward<Args>(args)...);
+                node.branch.index_of_first_child, boundaries, x, y, std::forward<Args>(args)...);
         }
 
         int64_t item_index = 0;
@@ -482,29 +492,88 @@ private:
             return {iterator(this, node_index, node.leaf.size - 1), true};
         }
 
-        std::array<uint64_t, 4> new_children;
-        std::iota(new_children.begin(), new_children.end(), nodes_.size());
-        nodes_.resize(nodes_.size() + 4);
+        uint64_t new_index_of_first_child;
+        if (freed_nodes_.size()) {
+            new_index_of_first_child = freed_nodes_.back();
+            freed_nodes_.pop_back();
+        } else {
+            new_index_of_first_child = nodes_.size();
+            nodes_.resize(nodes_.size() + 4);
+        }
 
         tree_node &node_as_branch = nodes_[node_index];
-
         __unroll_4 for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
             auto x_ = node_as_branch.leaf.items[i].x;
             auto y_ = node_as_branch.leaf.items[i].y;
             if constexpr (std::is_void_v<StorageType>) {
-                emplace_recursively_helper(new_children, boundaries, x_, y_);
+                emplace_recursively_helper(new_index_of_first_child, boundaries, x_, y_);
             } else {
-                emplace_recursively_helper(
-                    new_children, boundaries, x_, y_, node_as_branch.leaf.items[i].storage);
+                emplace_recursively_helper(new_index_of_first_child,
+                                           boundaries,
+                                           x_,
+                                           y_,
+                                           node_as_branch.leaf.items[i].storage);
             }
         }
 
         node_as_branch.is_branch = true;
-        node_as_branch.branch.children = new_children;
+        node_as_branch.branch.index_of_first_child = new_index_of_first_child;
         size_ -= MAXIMUM_NODE_SIZE;
 
         return emplace_recursively_helper(
-            new_children, boundaries, x, y, std::forward<Args>(args)...);
+            new_index_of_first_child, boundaries, x, y, std::forward<Args>(args)...);
+    }
+
+    inline bool erase_recursively(uint64_t                            node_index,
+                                  const bounding_box<CoordinateType> &boundaries,
+                                  CoordinateType                      x,
+                                  CoordinateType                      y) {
+        assert(node_index < nodes_.size());
+
+        tree_node &node = nodes_[node_index];
+        if (node.is_a_leaf()) {
+            for (uint8_t i = 0; i < node.leaf.size; ++i) {
+                if (x == node.leaf.items[i].x && y == node.leaf.items[i].y) {
+                    uint64_t last_index = node.leaf.size - 1;
+                    if (last_index != i) {
+                        node.leaf.items[i] = std::move(node.leaf.items[last_index]);
+                    }
+
+                    --node.leaf.size;
+                    --size_;
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
+        const bool erased = erase_recursively(node.branch.index_of_first_child + selected_quad,
+                                              compute_new_boundaries(selected_quad, boundaries),
+                                              x,
+                                              y);
+
+        if (!erased) {
+            return false;
+        }
+
+        for (uint64_t quad = 0; quad < 4; ++quad) {
+            const tree_node &child_node = nodes_[node.branch.index_of_first_child + quad];
+            if (child_node.is_a_branch()) {
+                return true;
+            }
+
+            if (child_node.leaf.size) {
+                return true;
+            }
+        }
+
+        freed_nodes_.push_back(node.branch.index_of_first_child);
+        node.reset();
+
+        return true;
     }
 
     inline iterator find_recursively(CoordinateType                      x,
@@ -527,7 +596,7 @@ private:
         return find_recursively(x,
                                 y,
                                 compute_new_boundaries(selected_quad, boundaries),
-                                node.branch.children[selected_quad]);
+                                node.branch.index_of_first_child + selected_quad);
     }
 
     template <typename Func>
@@ -550,7 +619,7 @@ private:
         __unroll_4 for (uint64_t i = 0; i < 4; ++i) {
             auto new_boundaries = compute_new_boundaries(i, boundaries);
             if (bounding_boxes_overlap(bbox, new_boundaries)) {
-                find_recursively(bbox, new_boundaries, func, node.branch.children[i]);
+                find_recursively(bbox, new_boundaries, func, node.branch.index_of_first_child + i);
             }
         }
     }
@@ -596,7 +665,7 @@ private:
         }
 
         const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
-        nearest_recursively(node.branch.children[selected_quad],
+        nearest_recursively(node.branch.index_of_first_child + selected_quad,
                             new_boundaries[selected_quad],
                             x,
                             y,
@@ -607,7 +676,7 @@ private:
             uint64_t quad = (i + selected_quad) % 4;
             if (smallest_distance_from_bounding_box(new_boundaries[quad], x, y) <=
                 nearest_distance_squared) {
-                nearest_recursively(node.branch.children[quad],
+                nearest_recursively(node.branch.index_of_first_child + quad,
                                     new_boundaries[quad],
                                     x,
                                     y,
@@ -620,6 +689,7 @@ private:
     const bounding_box<CoordinateType> boundaries_;
     uint64_t                           size_;
     std::vector<tree_node>             nodes_;
+    std::vector<uint64_t>              freed_nodes_;
 };
 }  // namespace internal
 

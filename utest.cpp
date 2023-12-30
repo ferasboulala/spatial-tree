@@ -115,6 +115,70 @@ TEST(TestSpatialTree, UniqueInsertions) {
     typed_test.operator()<int>();
 }
 
+TEST(TestSpatialTree, UniqueDeletions) {
+    const auto typed_test = [&]<typename CoordT>() {
+        const std::vector<uint64_t> test_sizes = {1, 2, 3, 7, 10, 100, 9999, 10000};
+        for (uint64_t test_size : test_sizes) {
+            const auto inner_test = [&]<typename TreeType>(auto &tree) {
+                for (uint64_t i = 1; i <= test_size; ++i) {
+                    CoordT coord = i;
+                    ASSERT_TRUE(tree.emplace(coord, coord, i).second);
+                    ASSERT_TRUE(tree.emplace(coord, -coord, i).second);
+                    ASSERT_TRUE(tree.emplace(-coord, coord, i).second);
+                    ASSERT_TRUE(tree.emplace(-coord, -coord, i).second);
+                }
+                ASSERT_TRUE(!tree.empty());
+                for (uint64_t i = 1; i <= test_size; ++i) {
+                    CoordT coord = i;
+                    ASSERT_TRUE(tree.erase(coord, coord));
+                    ASSERT_TRUE(tree.erase(coord, -coord));
+                    ASSERT_TRUE(tree.erase(-coord, coord));
+                    ASSERT_TRUE(tree.erase(-coord, -coord));
+                }
+                ASSERT_TRUE(tree.empty());
+                ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
+                for (uint64_t i = 1; i <= test_size; ++i) {
+                    CoordT coord = i;
+                    ASSERT_TRUE(tree.emplace(coord, coord, i).second);
+                    ASSERT_TRUE(tree.emplace(coord, -coord, i).second);
+                    ASSERT_TRUE(tree.emplace(-coord, coord, i).second);
+                    ASSERT_TRUE(tree.emplace(-coord, -coord, i).second);
+                }
+                ASSERT_TRUE(!tree.empty());
+                for (uint64_t i = 1; i <= test_size; ++i) {
+                    CoordT coord = i;
+                    ASSERT_TRUE(tree.erase(coord, coord));
+                    ASSERT_TRUE(tree.erase(coord, -coord));
+                    ASSERT_TRUE(tree.erase(-coord, coord));
+                    ASSERT_TRUE(tree.erase(-coord, -coord));
+                }
+                ASSERT_TRUE(tree.empty());
+                ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
+            };
+            CoordT                         bound = test_size;
+            const st::bounding_box<CoordT> bounds(-bound, bound, bound, -bound);
+
+            st::internal::spatial_tree<int, CoordT> bounded(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
+
+            st::internal::spatial_tree<int, CoordT> unbounded;
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
+
+            st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
+
+            st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
+
+            st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
+        }
+    };
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
+}
+
 TEST(TestSpatialTree, RandomInsertions) {
     static constexpr int DISTRIBUTION_BEG = -10000;
     static constexpr int DISTRIBUTION_END = 10000;
