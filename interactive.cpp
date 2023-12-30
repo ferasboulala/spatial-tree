@@ -3,10 +3,10 @@
 
 #include "spatial.h"
 
-static constexpr uint64_t                       CANVAS_HEIGHT = 1000;
-static constexpr uint64_t                       CANVAS_WIDTH = 1000;
+static constexpr uint64_t                       CANVAS_HEIGHT = 1500;
+static constexpr uint64_t                       CANVAS_WIDTH = 2500;
 static cv::Mat                                  canvas;
-static constexpr uint8_t                        MAXIMUM_NODE_SIZE = 1;
+static constexpr uint8_t                        MAXIMUM_NODE_SIZE = 3;
 static st::spatial_set<int, MAXIMUM_NODE_SIZE> *points;
 static const char                              *window_name = "canvas";
 
@@ -14,22 +14,22 @@ void mouse_callback(int event, int x, int y, int, void *) {
     if (event != cv::EVENT_LBUTTONDOWN) return;
 
     std::cout << "Processing callback" << std::endl;
-    if (!points->emplace(x, y).second) {
-        points->erase(x, y);
+    if (!points->emplace(y, x).second) {
+        points->erase(y, x);
     }
 
     canvas = cv::Mat::zeros(CANVAS_HEIGHT, CANVAS_WIDTH, CV_8UC3);
-    points->walk([&](auto boundaries) {
+    points->walk([&](auto boundaries, bool is_leaf) {
+        if (is_leaf) return;
         auto [top_x, top_y, bottom_x, bottom_y] = boundaries;
         auto mid_x = (top_x + bottom_x) / 2;
         auto mid_y = (top_y + bottom_y) / 2;
-        std::cout << mid_y << std::endl;
 
-        cv::line(canvas, {mid_x, bottom_y}, {mid_x, top_y}, {128, 128, 128}, 3);
-        cv::line(canvas, {top_x, mid_y}, {bottom_x, mid_y}, {128, 128, 128}, 3);
+        cv::line(canvas, {bottom_y, mid_x}, {top_y, mid_x}, {128, 128, 128}, 2);
+        cv::line(canvas, {mid_y, top_x}, {mid_y, bottom_x}, {128, 128, 128}, 2);
     });
     for (auto [x, y] : *points) {
-        cv::circle(canvas, {x, y}, 5, {0, 255, 0}, cv::FILLED);
+        cv::circle(canvas, {y, x}, 5, {0, 255, 0}, cv::FILLED);
     }
     cv::imshow(window_name, canvas);
 }

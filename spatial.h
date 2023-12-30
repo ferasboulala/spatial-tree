@@ -169,10 +169,10 @@ public:
     void walk(Func func) const {
         const std::function<void(uint64_t, const bounding_box<CoordinateType> &)> walk_recursively =
             [&](auto node_index, auto boundaries) {
-                func(boundaries);
-
                 assert(node_index < nodes_.size());
                 const tree_node &node = nodes_[node_index];
+                func(boundaries, node.is_a_leaf());
+
                 if (node.is_a_leaf()) {
                     return;
                 }
