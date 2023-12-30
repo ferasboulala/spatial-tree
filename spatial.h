@@ -559,7 +559,6 @@ private:
         return ret;
     }
 
-    template <bool IsRoot = false>
     inline void recursively_gather_points(uint64_t node_index, tree_node_leaf &leaf) {
         assert(node_index < nodes_.size());
 
@@ -568,7 +567,8 @@ private:
             for (uint8_t i = 0; i < node.leaf.size; ++i) {
                 leaf.items[leaf.size++] = std::move(node.leaf.items[i]);
             }
-            assert(leaf.size < MAXIMUM_NODE_SIZE);
+            assert(leaf.size <= MAXIMUM_NODE_SIZE);
+            node.reset();
             return;
         }
 
@@ -577,11 +577,9 @@ private:
         for (uint64_t quad = 0; quad < 4; ++quad) {
             recursively_gather_points(node.branch.index_of_first_child + quad, leaf);
         }
-        freed_nodes_.push_back(node.branch.index_of_first_child);
 
-        if constexpr (!IsRoot) {
-            node.reset();
-        }
+        freed_nodes_.push_back(node.branch.index_of_first_child);
+        node.reset();
     }
 
     inline bool erase_recursively(uint64_t                            node_index,
@@ -629,8 +627,14 @@ private:
         }
 
         // TODO: Specify that it is safe to access &node because there was no realloc.
+        /// EXPLANATION: Not doing it at the root because of the union.
+        uint64_t index_of_first_child = node.branch.index_of_first_child;
         node.reset();
-        recursively_gather_points<true>(node_index, node.leaf);
+        for (uint64_t quad = 0; quad < 4; ++quad) {
+            recursively_gather_points(index_of_first_child + quad, node.leaf);
+        }
+        freed_nodes_.push_back(index_of_first_child);
+        assert(node.leaf.size <= MAXIMUM_NODE_SIZE);
 
         return true;
     }
