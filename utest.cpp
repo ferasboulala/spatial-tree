@@ -1,9 +1,9 @@
 #ifdef NDEBUG
 #undef NDEBUG
-#include "spatial.h"
+#include "spatial-tree.h"
 #define NDEBUG
 #else
-#include "spatial.h"
+#include "spatial-tree.h"
 #endif
 
 #include <gtest/gtest.h>

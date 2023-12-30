@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "spatial.h"
+#include "spatial-tree.h"
 
 #define BEG_TYPELESS -10000
 #define END_TYPELESS 10000

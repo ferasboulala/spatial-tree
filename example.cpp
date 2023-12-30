@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "spatial.h"
+#include "spatial-tree.h"
 
 int main() {
     st::spatial_set my_quad_tree;

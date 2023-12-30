@@ -1,7 +1,7 @@
 #include <limits>
 #include <opencv2/opencv.hpp>
 
-#include "spatial.h"
+#include "spatial-tree.h"
 
 static constexpr uint64_t                       CANVAS_HEIGHT = 1500;
 static constexpr uint64_t                       CANVAS_WIDTH = 2500;
