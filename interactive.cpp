@@ -6,14 +6,13 @@
 static constexpr uint64_t                       CANVAS_HEIGHT = 1500;
 static constexpr uint64_t                       CANVAS_WIDTH = 2500;
 static cv::Mat                                  canvas;
-static constexpr uint8_t                        MAXIMUM_NODE_SIZE = 3;
+static constexpr uint8_t                        MAXIMUM_NODE_SIZE = 1;
 static st::spatial_set<int, MAXIMUM_NODE_SIZE> *points;
 static const char                              *window_name = "canvas";
 
 void mouse_callback(int event, int x, int y, int, void *) {
     if (event != cv::EVENT_LBUTTONDOWN) return;
 
-    std::cout << "Processing callback" << std::endl;
     if (!points->emplace(y, x).second) {
         points->erase(y, x);
     }
