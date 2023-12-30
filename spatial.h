@@ -55,12 +55,12 @@ struct bounding_box {
 namespace internal {
 
 template <typename AbsDiff, typename T, typename... Args>
-inline T euclidean_distance_squared_impl(AbsDiff) {
+static inline T euclidean_distance_squared_impl(AbsDiff) {
     return T(0);
 }
 
 template <typename AbsDiff, typename T, typename... Args>
-inline T euclidean_distance_squared_impl(AbsDiff absdiff, T x1, T x2, Args... xs) {
+static inline T euclidean_distance_squared_impl(AbsDiff absdiff, T x1, T x2, Args... xs) {
     const T sum = euclidean_distance_squared_impl<AbsDiff, T>(absdiff, xs...);
     const T dx = absdiff(x2, x1);
 
@@ -83,7 +83,7 @@ struct UnsafeAbsDiff {
 };
 
 template <typename T>
-inline T absdiff(T x, T y) {
+static inline T absdiff(T x, T y) {
     if constexpr (std::is_floating_point_v<T>) {
         return std::fabs(UnsafeAbsDiff<T>()(x, y));
     } else {
@@ -92,7 +92,7 @@ inline T absdiff(T x, T y) {
 }
 
 template <typename T, typename... Args>
-inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
+static inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
     if constexpr (std::is_floating_point_v<T> || std::is_signed_v<T>) {
         return euclidean_distance_squared_impl(UnsafeAbsDiff<T>(), x1, x2, xs...);
     } else {
@@ -101,7 +101,7 @@ inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
 }
 
 template <typename CoordinateType>
-inline bool is_within_interval(CoordinateType x, CoordinateType beg, CoordinateType end) {
+static inline bool is_within_interval(CoordinateType x, CoordinateType beg, CoordinateType end) {
     assert(end >= beg);
     return x >= beg && x <= end;
 }
@@ -354,11 +354,18 @@ private:
         CoordinateType origin_y =
             (boundaries.top_y - boundaries.bottom_y) / 2 + boundaries.bottom_y;
 
-        // This logic must match integer flooring (less-or-equal instead of greater-or-equal).
-        return cartesian_quadrant::NE +
-               ((y > origin_y) * (x <= origin_x)) * cartesian_quadrant::NW +
-               (y <= origin_y) * ((x <= origin_x) * cartesian_quadrant::SW +
-                                  (y <= origin_y) * (x > origin_x) * cartesian_quadrant::SE);
+        // Faster than branchless.
+        if (x <= origin_x) {
+            if (y > origin_y) {
+                return cartesian_quadrant::NW;
+            }
+            return cartesian_quadrant::SW;
+        } else {
+            if (y <= origin_y) {
+                return cartesian_quadrant::SE;
+            }
+            return cartesian_quadrant::NE;
+        }
     }
 
     static inline bounding_box<CoordinateType> compute_new_boundaries(
@@ -376,10 +383,24 @@ private:
         CoordinateType new_height = height / 2;
         CoordinateType width_remainder = width - 2 * new_width;
         CoordinateType height_remainder = height - 2 * new_height;
-        CoordinateType top_x = boundaries.top_x + fx * new_width;
-        CoordinateType top_y = boundaries.top_y - (1 - fy) * (new_height + height_remainder);
-        CoordinateType bottom_x = boundaries.bottom_x - (1 - fx) * (new_width + width_remainder);
-        CoordinateType bottom_y = boundaries.bottom_y + fy * new_height;
+
+        CoordinateType top_x = boundaries.top_x;
+        CoordinateType bottom_x = boundaries.bottom_x;
+        CoordinateType top_y = boundaries.top_y;
+        CoordinateType bottom_y = boundaries.bottom_y;
+
+        // Faster than branchless.
+        if (fx) {
+            top_x += new_width;
+        } else {
+            bottom_x -= (new_width + width_remainder);
+        }
+
+        if (fy) {
+            bottom_y += new_height;
+        } else {
+            top_y -= (new_height + height_remainder);
+        }
 
         return {top_x, top_y, bottom_x, bottom_y};
     }

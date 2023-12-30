@@ -14,7 +14,7 @@
 static_assert(END_TYPELESS > BEG_TYPELESS);
 
 static constexpr uint64_t LOW = 1 << 10;
-static constexpr uint64_t HIGH = 1 << 20;
+static constexpr uint64_t HIGH = 1 << 22;
 
 struct opaque_data {
     char opaque[1];
@@ -71,8 +71,12 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
 
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
-    static constexpr CoordT AREA = (END - BEG) * (END - BEG);
+    static constexpr CoordT RANGE = END - BEG;
+    static constexpr CoordT AREA = RANGE * RANGE;
+    static constexpr double BBOX_DIM_RATIO = 0.1;
+    static constexpr CoordT BBOX_DIM_SIZE = BBOX_DIM_RATIO * RANGE;
     static_assert(AREA > BEG && AREA > END);
+    static_assert(BBOX_DIM_SIZE);
 
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(BEG, END, test_size);
@@ -84,20 +88,16 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
         }
     }
 
-    static constexpr uint64_t n_bounding_boxes = 1 << 7;
-    const auto bounding_boxes_points = generate_points(BEG, END, n_bounding_boxes * 2);
+    static constexpr uint64_t n_bounding_boxes = 1 << 16;
+    const auto bounding_boxes_points = generate_points(BEG, END, n_bounding_boxes);
     std::vector<st::bounding_box<CoordT>> bounding_boxes;
     bounding_boxes.reserve(n_bounding_boxes);
-    CoordT average_area = 0;
-    for (uint64_t i = 0; i < 2 * n_bounding_boxes; i += 2) {
-        auto [x1, x2] = bounding_boxes_points[i];
-        auto [y1, y2] = bounding_boxes_points[i + 1];
-        auto [top_x, bottom_x] = std::minmax(x1, x2);
-        auto [bottom_y, top_y] = std::minmax(y1, y2);
-        bounding_boxes.emplace_back(top_x, top_y, bottom_x, bottom_y);
-        average_area += bounding_boxes.back().area();
+    for (uint64_t i = 0; i < n_bounding_boxes; ++i) {
+        auto [x1, y1] = bounding_boxes_points[i];
+        auto x2 = x1 + BBOX_DIM_SIZE;
+        auto y2 = y1 + BBOX_DIM_SIZE;
+        bounding_boxes.emplace_back(x1, y2, x2, y1);
     }
-    average_area /= n_bounding_boxes;
 
     uint64_t n_points_found = 0;
     for (auto _ : state) {
@@ -105,7 +105,6 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
             tree.find(bbox, [&](auto) { ++n_points_found; });
         }
     }
-    state.counters["avg_area (%)"] = average_area / AREA;
     state.counters["found"] = n_points_found / state.iterations() / n_bounding_boxes;
     state.SetItemsProcessed(n_bounding_boxes * state.iterations());
 }
@@ -129,7 +128,7 @@ void benchmark_find_single(benchmark::State &state, TreeType &tree) {
         }
     }
 
-    static constexpr uint64_t n_points_to_find = 1 << 7;
+    static constexpr uint64_t n_points_to_find = 1 << 24;
     const auto                points_to_find = generate_points(BEG, END, n_points_to_find);
 
     for (auto _ : state) {
@@ -157,7 +156,7 @@ void benchmark_nearest(benchmark::State &state, TreeType &tree) {
         }
     }
 
-    static constexpr uint64_t n_queries = 1 << 10;
+    static constexpr uint64_t n_queries = 1 << 24;
     const auto                query_points = generate_points(BEG, END, n_queries);
     uint64_t                  n_points_found = 0;
     for (auto _ : state) {
@@ -178,8 +177,8 @@ private:
             auto [x, y] = coords;
 
             size_t seed = 0;
-            seed ^= std::hash<double>()(x) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-            seed ^= std::hash<double>()(y) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed ^= std::hash<CoordinateType>()(x) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed ^= std::hash<CoordinateType>()(y) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 
             return seed;
         }
