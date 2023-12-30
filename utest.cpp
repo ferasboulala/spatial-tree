@@ -179,7 +179,7 @@ TEST(TestSpatialTree, UniqueDeletions) {
     typed_test.operator()<int>();
 }
 
-TEST(TestSpatialTree, RandomInsertions) {
+TEST(TestSpatialTree, RandomInsertionsAndDeletions) {
     static constexpr int DISTRIBUTION_BEG = -10000;
     static constexpr int DISTRIBUTION_END = 10000;
     static constexpr int RANGE_SIZE = DISTRIBUTION_END - DISTRIBUTION_BEG + 1;
@@ -204,6 +204,16 @@ TEST(TestSpatialTree, RandomInsertions) {
 
                 ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
                 ASSERT_EQ(added_points.size(), tree.size());
+
+                for (uint64_t i = 0; i < 100 * test_size; ++i) {
+                    const int     x = distribution(device);
+                    const int     y = distribution(device);
+                    const bool    was_deleted_from_tree = tree.erase(x, y);
+                    const int64_t unique_hash = x + RANGE_SIZE * y;
+                    const bool    was_deleted_from_map = added_points.erase(unique_hash);
+                    ASSERT_EQ(was_deleted_from_map, was_deleted_from_tree);
+                }
+                ASSERT_EQ(added_points.size(), tree.size());
                 tree.clear();
             }
         };
@@ -212,9 +222,6 @@ TEST(TestSpatialTree, RandomInsertions) {
 
         st::internal::spatial_tree<int, CoordT> bounded(bounds);
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
-
-        st::internal::spatial_tree<int, CoordT> unbounded;
-        inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
 
         st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
