@@ -157,12 +157,19 @@ public:
 
     ~spatial_tree() = default;
 
-    inline uint64_t size() const { return size_; }
-    inline bool     empty() const { return size() == 0; }
-    inline void     clear() {
+    inline uint64_t size() const {
+        assert(nodes_.size());
+        const auto &root = nodes_.front();
+        if (root.is_a_leaf()) {
+            return root.leaf.size;
+        }
+        return root.branch.size;
+    }
+    inline bool empty() const { return size() == 0; }
+    inline void clear() {
         nodes_.resize(1);
         nodes_.front().reset();
-        size_ = 0;
+        freed_nodes_.clear();
     }
 
     template <typename Func>
@@ -275,7 +282,7 @@ public:
     }
 
     inline bool erase(CoordinateType x, CoordinateType y) {
-        return erase_recursively(0, boundaries_, x, y);
+        return erase_recursively(0, boundaries_, size(), x, y);
     }
 
     std::vector<iterator> nearest(CoordinateType x, CoordinateType y) const {
@@ -330,6 +337,7 @@ private:
     struct tree_node_branch {
         // Children are adjacent in memory.
         uint64_t index_of_first_child;
+        uint64_t size;
     };
 
     struct tree_node {
@@ -479,8 +487,11 @@ private:
         tree_node &node = nodes_[node_index];
 
         if (node.is_a_branch()) {
-            return emplace_recursively_helper(
+            const auto ret = emplace_recursively_helper(
                 node.branch.index_of_first_child, boundaries, x, y, std::forward<Args>(args)...);
+            nodes_[node_index].branch.size += ret.second;
+
+            return ret;
         }
 
         int64_t item_index = 0;
@@ -510,7 +521,6 @@ private:
 #endif
             }
             ++node.leaf.size;
-            ++size_;
             return {iterator(this, node_index, node.leaf.size - 1), true};
         }
 
@@ -540,14 +550,43 @@ private:
 
         node_as_branch.is_branch = true;
         node_as_branch.branch.index_of_first_child = new_index_of_first_child;
-        size_ -= MAXIMUM_NODE_SIZE;
+        node_as_branch.branch.size = MAXIMUM_NODE_SIZE + 1;
 
-        return emplace_recursively_helper(
+        const auto ret = emplace_recursively_helper(
             new_index_of_first_child, boundaries, x, y, std::forward<Args>(args)...);
+        assert(ret.second);
+
+        return ret;
+    }
+
+    template <bool IsRoot = false>
+    inline void recursively_gather_points(uint64_t node_index, tree_node_leaf &leaf) {
+        assert(node_index < nodes_.size());
+
+        tree_node &node = nodes_[node_index];
+        if (node.is_a_leaf()) {
+            for (uint8_t i = 0; i < node.leaf.size; ++i) {
+                leaf.items[leaf.size++] = std::move(node.leaf.items[i]);
+            }
+            assert(leaf.size < MAXIMUM_NODE_SIZE);
+            return;
+        }
+
+        // TODO: Specify that it is safe to access &node because there was no realloc.
+        // TODO: Do it elsewhere too.
+        for (uint64_t quad = 0; quad < 4; ++quad) {
+            recursively_gather_points(node.branch.index_of_first_child + quad, leaf);
+        }
+        freed_nodes_.push_back(node.branch.index_of_first_child);
+
+        if constexpr (!IsRoot) {
+            node.reset();
+        }
     }
 
     inline bool erase_recursively(uint64_t                            node_index,
                                   const bounding_box<CoordinateType> &boundaries,
+                                  uint64_t                            parent_size_after_removal,
                                   CoordinateType                      x,
                                   CoordinateType                      y) {
         assert(node_index < nodes_.size());
@@ -560,9 +599,7 @@ private:
                     if (last_index != i) {
                         node.leaf.items[i] = std::move(node.leaf.items[last_index]);
                     }
-
                     --node.leaf.size;
-                    --size_;
 
                     return true;
                 }
@@ -571,9 +608,11 @@ private:
             return false;
         }
 
+        uint64_t   size_after_removal = node.branch.size - 1;
         const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
         const bool erased = erase_recursively(node.branch.index_of_first_child + selected_quad,
                                               compute_new_boundaries(selected_quad, boundaries),
+                                              size_after_removal,
                                               x,
                                               y);
 
@@ -581,19 +620,17 @@ private:
             return false;
         }
 
-        for (uint64_t quad = 0; quad < 4; ++quad) {
-            const tree_node &child_node = nodes_[node.branch.index_of_first_child + quad];
-            if (child_node.is_a_branch()) {
-                return true;
-            }
-
-            if (child_node.leaf.size) {
-                return true;
-            }
+        if (parent_size_after_removal <= MAXIMUM_NODE_SIZE) {
+            return true;
         }
 
-        freed_nodes_.push_back(node.branch.index_of_first_child);
+        if (--node.branch.size > MAXIMUM_NODE_SIZE) {
+            return true;
+        }
+
+        // TODO: Specify that it is safe to access &node because there was no realloc.
         node.reset();
+        recursively_gather_points<true>(node_index, node.leaf);
 
         return true;
     }
@@ -709,7 +746,6 @@ private:
     }
 
     const bounding_box<CoordinateType> boundaries_;
-    uint64_t                           size_;
     std::vector<tree_node>             nodes_;
     std::vector<uint64_t>              freed_nodes_;
 };

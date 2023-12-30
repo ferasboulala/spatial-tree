@@ -202,8 +202,8 @@ TEST(TestSpatialTree, RandomInsertions) {
                     ASSERT_EQ(was_inserted_in_map, was_inserted_in_tree);
                 }
 
-                ASSERT_EQ(added_points.size(), tree.size());
                 ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
+                ASSERT_EQ(added_points.size(), tree.size());
                 tree.clear();
             }
         };
