@@ -59,11 +59,20 @@ TEST(TestEuclide, TestAbsDiff) {
 }
 
 TEST(TestSpatialTree, ManyValueTypes) {
-    st::internal::spatial_tree<int>                      integer;
     st::internal::spatial_tree<float>                    floating;
     st::internal::spatial_tree<std::string>              str;
     st::internal::spatial_tree<std::vector<std::string>> vec;
     st::internal::spatial_tree                           nothing;
+}
+
+TEST(TestSpatialTree, MutableAccesses) {
+    st::internal::spatial_tree<int> tree;
+    auto                            it = tree.emplace(0, 0, 0).first;
+    auto [x, y, data] = *it;
+    ++data;
+    it = tree.find(0, 0);
+    std::tie(x, y, data) = *it;
+    ASSERT_EQ(data, 1);
 }
 
 TEST(TestSpatialTree, UniqueInsertions) {

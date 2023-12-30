@@ -184,6 +184,11 @@ public:
         inline ~iterator() = default;
 
         inline auto operator*() const { return tree_->operator()(node_index_, item_index_); }
+        inline auto operator*() {
+            return const_cast<spatial_tree *>(tree_)->operator()(node_index_, item_index_);
+        }
+        inline auto operator->() const { return operator(); }
+        inline auto operator->() { return operator(); }
 
         iterator &operator++() {
             assert(node_index_ != tree_node::NO_INDEX);
@@ -344,6 +349,17 @@ private:
         } else {
             const auto &[x, y, storage] = node.leaf.items[item_index];
             return std::tuple<CoordinateType, CoordinateType, const StorageType &>(x, y, storage);
+        }
+    }
+
+    inline auto operator()(uint64_t node_index, uint64_t item_index) {
+        auto this_as_const = const_cast<const spatial_tree *>(this);
+        if constexpr (std::is_void_v<StorageType>) {
+            return this_as_const->operator()(node_index, item_index);
+        } else {
+            const auto &[x, y, storage] = this_as_const->operator()(node_index, item_index);
+            return std::tuple<CoordinateType, CoordinateType, StorageType &>(
+                x, y, const_cast<StorageType &>(storage));
         }
     }
 
