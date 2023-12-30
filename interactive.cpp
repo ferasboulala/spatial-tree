@@ -1,20 +1,35 @@
-#include <iostream>
+#include <limits>
 #include <opencv2/opencv.hpp>
 
 #include "spatial.h"
 
 static constexpr uint64_t                       CANVAS_HEIGHT = 1500;
 static constexpr uint64_t                       CANVAS_WIDTH = 2500;
+static constexpr int                            POINT_RADIUS = 10;
 static cv::Mat                                  canvas;
 static constexpr uint8_t                        MAXIMUM_NODE_SIZE = 1;
 static st::spatial_set<int, MAXIMUM_NODE_SIZE> *points;
 static const char                              *window_name = "canvas";
 
+#include <iostream>
 void mouse_callback(int event, int x, int y, int, void *) {
     if (event != cv::EVENT_LBUTTONDOWN) return;
 
-    if (!points->emplace(y, x).second) {
-        points->erase(y, x);
+    auto                 res = points->nearest(y, x);
+    static constexpr int min_distance_squared = POINT_RADIUS * POINT_RADIUS;
+    int                  distance_squared = std::numeric_limits<int>::max();
+    if (!res.empty()) {
+        auto [y_, x_] = *res.front();
+        distance_squared = st::internal::euclidean_distance_squared(x, x_, y, y_);
+    }
+
+    if (distance_squared <= min_distance_squared) {
+        for (auto it : res) {
+            auto [y_, x_] = *it;
+            points->erase(y_, x_);
+        }
+    } else {
+        points->emplace(y, x);
     }
 
     canvas = cv::Mat::zeros(CANVAS_HEIGHT, CANVAS_WIDTH, CV_8UC3);
@@ -27,8 +42,8 @@ void mouse_callback(int event, int x, int y, int, void *) {
         cv::line(canvas, {bottom_y, mid_x}, {top_y, mid_x}, {128, 128, 128}, 2);
         cv::line(canvas, {mid_y, top_x}, {mid_y, bottom_x}, {128, 128, 128}, 2);
     });
-    for (auto [x, y] : *points) {
-        cv::circle(canvas, {y, x}, 5, {0, 255, 0}, cv::FILLED);
+    for (auto [y, x] : *points) {
+        cv::circle(canvas, {x, y}, POINT_RADIUS, {0, 255, 0}, cv::FILLED);
     }
     cv::imshow(window_name, canvas);
 }
