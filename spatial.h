@@ -165,6 +165,28 @@ public:
         size_ = 0;
     }
 
+    template <typename Func>
+    void walk(Func func) const {
+        const std::function<void(uint64_t, const bounding_box<CoordinateType> &)> walk_recursively =
+            [&](auto node_index, auto boundaries) {
+                func(boundaries);
+
+                assert(node_index < nodes_.size());
+                const tree_node &node = nodes_[node_index];
+                if (node.is_a_leaf()) {
+                    return;
+                }
+
+                for (uint64_t quad = 0; quad < 4; ++quad) {
+                    const uint64_t child_index = node.branch.index_of_first_child + quad;
+                    const auto     new_boundaries = compute_new_boundaries(quad, boundaries);
+                    walk_recursively(child_index, new_boundaries);
+                }
+            };
+
+        walk_recursively(0, boundaries_);
+    }
+
     struct iterator {
     public:
         using iterator_category = std::forward_iterator_tag;
@@ -695,11 +717,21 @@ private:
 
 template <typename CoordinateType, typename StorageType, uint8_t MAXIMUM_NODE_SIZE = 32>
 class spatial_map : public internal::spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> {
+public:
     static_assert(!std::is_void_v<StorageType>, "For no storage type, use st::spatial_set");
+    spatial_map() : internal::spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE>() {}
+    spatial_map(const bounding_box<CoordinateType> &boundaries)
+        : internal::spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE>(boundaries) {}
 };
 
 template <typename CoordinateType = double, uint8_t MAXIMUM_NODE_SIZE = 32>
-class spatial_set : public internal::spatial_tree<void, CoordinateType, MAXIMUM_NODE_SIZE> {};
+class spatial_set : public internal::spatial_tree<void, CoordinateType, MAXIMUM_NODE_SIZE> {
+public:
+    spatial_set() : internal::spatial_tree<void, CoordinateType, MAXIMUM_NODE_SIZE>() {}
+    spatial_set(const bounding_box<CoordinateType> &boundaries)
+        : internal::spatial_tree<void, CoordinateType, MAXIMUM_NODE_SIZE>(boundaries) {}
+};
+
 }  // namespace st
 
 #ifdef __gnu_compiler

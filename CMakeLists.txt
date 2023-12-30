@@ -39,5 +39,25 @@ if (${benchmark_FOUND})
    endfunction()
  
    create_benchmark("bench" bench.cpp)
-   create_benchmark("example" example.cpp)
+endif()
+
+add_executable("example" example.cpp)
+
+find_package(OpenCV)
+if (DEFINED OpenCV_LIBRARIES)
+  function(create_binary target_name entry_point)
+    add_executable(${target_name} ${entry_point})
+    target_include_directories(
+      ${target_name}
+      PUBLIC
+      ${CMAKE_SOURCE_DIR}
+      ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(
+      ${target_name}
+      ${OpenCV_LIBRARIES}
+      -lopencv_core
+      -lopencv_highgui
+      -lopencv_imgproc)
+  endfunction()
+  create_binary("interactive" interactive.cpp)
 endif()
