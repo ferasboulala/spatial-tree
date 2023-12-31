@@ -3,15 +3,18 @@
 
 #include "spatial-tree.h"
 
-static constexpr uint64_t                       CANVAS_HEIGHT = 1500;
-static constexpr uint64_t                       CANVAS_WIDTH = 2500;
-static constexpr int                            POINT_RADIUS = 10;
-static cv::Mat                                  canvas;
-static constexpr uint8_t                        MAXIMUM_NODE_SIZE = 1;
-static st::spatial_set<int, MAXIMUM_NODE_SIZE> *points;
-static const char                              *window_name = "canvas";
+static constexpr int     LINE_THICKNESS = 1;
+static constexpr uint8_t MAXIMUM_NODE_SIZE = 1;
+static const char       *window_name = "canvas";
 
-#include <iostream>
+#define DRAW
+#ifdef DRAW
+static constexpr uint64_t                       CANVAS_HEIGHT = 1500;
+static constexpr int                            POINT_RADIUS = 10;
+static constexpr uint64_t                       CANVAS_WIDTH = 2500;
+static cv::Mat                                  canvas;
+static st::spatial_set<int, MAXIMUM_NODE_SIZE> *points;
+
 void mouse_callback(int event, int x, int y, int, void *) {
     if (event != cv::EVENT_LBUTTONDOWN) return;
 
@@ -39,8 +42,8 @@ void mouse_callback(int event, int x, int y, int, void *) {
         auto mid_x = (top_x + bottom_x) / 2;
         auto mid_y = (top_y + bottom_y) / 2;
 
-        cv::line(canvas, {bottom_y, mid_x}, {top_y, mid_x}, {128, 128, 128}, 2);
-        cv::line(canvas, {mid_y, top_x}, {mid_y, bottom_x}, {128, 128, 128}, 2);
+        cv::line(canvas, {bottom_y, mid_x}, {top_y, mid_x}, {128, 128, 128}, LINE_THICKNESS);
+        cv::line(canvas, {mid_y, top_x}, {mid_y, bottom_x}, {128, 128, 128}, LINE_THICKNESS);
     });
     for (auto [y, x] : *points) {
         cv::circle(canvas, {x, y}, POINT_RADIUS, {0, 255, 0}, cv::FILLED);
@@ -58,5 +61,49 @@ int main() {
         cv::imshow(window_name, canvas);
     } while (cv::waitKey(0) != 113);
 
+    delete points;
+
     return 0;
 }
+
+#else
+
+#include <string>
+int main(int, char **argv) {
+    const std::string input_filename(argv[1]);
+    const std::string output_filename(argv[2]);
+    auto              map = cv::imread(input_filename, cv::IMREAD_GRAYSCALE);
+    cv::threshold(map, map, 128, std::numeric_limits<uint8_t>::max(), cv::THRESH_BINARY);
+
+    st::spatial_set<int, MAXIMUM_NODE_SIZE> points({0, map.cols, map.rows, 0});
+    for (int i = 0; i < map.rows; ++i) {
+        for (int j = 0; j < map.cols; ++j) {
+            if (!map.at<uint8_t>(i, j)) {
+                points.emplace(i, j);
+            }
+        }
+    }
+
+    cv::Mat color_map;
+    cv::cvtColor(map, color_map, cv::COLOR_GRAY2RGB);
+
+    points.walk([&](auto boundaries, bool is_leaf) {
+        if (is_leaf) return;
+        auto [top_x, top_y, bottom_x, bottom_y] = boundaries;
+        auto mid_x = (top_x + bottom_x) / 2;
+        auto mid_y = (top_y + bottom_y) / 2;
+
+        cv::line(color_map, {bottom_y, mid_x}, {top_y, mid_x}, {0, 128, 0}, LINE_THICKNESS);
+        cv::line(color_map, {mid_y, top_x}, {mid_y, bottom_x}, {0, 128, 0}, LINE_THICKNESS);
+    });
+
+    cv::namedWindow(window_name);
+    cv::imshow(window_name, color_map);
+    cv::waitKey(0);
+
+    cv::imwrite(output_filename, color_map);
+
+    return 0;
+}
+
+#endif
