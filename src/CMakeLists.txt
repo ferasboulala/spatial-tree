@@ -3,7 +3,8 @@ cmake_minimum_required(VERSION 3.0)
 project(spatial-tree)
 
 # Do not use -ffast-math because it will break floating point correctness. Use it only if coordinate types are integers.
-add_compile_options(-O3 -march=native -Wall -Wextra -Wpedantic -Werror -std=c++20 -std=gnu++20 -fverbose-asm -save-temps)
+add_compile_options(-O3 -march=native -Wall -Wextra -fverbose-asm -save-temps)
+  set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(ALL_LIBRARIES)
@@ -54,10 +55,7 @@ if (DEFINED OpenCV_LIBRARIES)
       ${OpenCV_INCLUDE_DIRS})
     target_link_libraries(
       ${target_name}
-      ${OpenCV_LIBRARIES}
-      -lopencv_core
-      -lopencv_highgui
-      -lopencv_imgproc)
+      ${OpenCV_LIBRARIES})
   endfunction()
   create_binary("interactive" interactive.cpp)
 endif()

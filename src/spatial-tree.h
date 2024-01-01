@@ -216,8 +216,8 @@ public:
         inline auto operator*() {
             return const_cast<spatial_tree *>(tree_)->operator()(node_index_, item_index_);
         }
-        inline auto operator->() const { return operator(); }
-        inline auto operator->() { return operator(); }
+        inline auto operator->() const { return this->operator(); }
+        inline auto operator->() { return this->operator(); }
 
         iterator &operator++() {
             assert(node_index_ != tree_node::NO_INDEX);
