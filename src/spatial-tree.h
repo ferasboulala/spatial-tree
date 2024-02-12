@@ -23,12 +23,57 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
 #include <limits>
 #include <numeric>
 #include <tuple>
 #include <vector>
 
 namespace st {
+
+namespace internal {
+
+template <uint64_t factor, typename Func, typename InductionVarType = uint64_t>
+inline void unroll_for(InductionVarType start, InductionVarType stop, const Func &func) {
+    if constexpr (factor == 2) {
+        __unroll_2 for (InductionVarType i = start; i < stop; ++i) { func(i); }
+    } else if (factor == 3) {
+        __unroll_3 for (InductionVarType i = start; i < stop; ++i) { func(i); }
+    } else if (factor == 4) {
+        __unroll_4 for (InductionVarType i = start; i < stop; ++i) { func(i); }
+    } else if (factor == 8) {
+        __unroll_8 for (InductionVarType i = start; i < stop; ++i) { func(i); }
+    } else {
+        __unroll_2 for (InductionVarType i = start; i < stop; ++i) { func(i); }
+    }
+}
+
+}  // namespace internal
+
+// When replacing the other bounding_box, be sure to check operand order.
+template <typename CoordinateType, uint64_t rank = 2>
+struct bounding_box2 {
+    std::array<CoordinateType, rank> starts;
+    std::array<CoordinateType, rank> stops;
+    inline bounding_box2() {
+        starts.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
+        stops.fill(std::numeric_limits<CoordinateType>::max() / 2);
+    }
+    inline bounding_box2(std::initializer_list<CoordinateType> boundaries) {
+        uint64_t i = 0;
+        for (auto it = boundaries.begin(); it != boundaries.begin() + rank; ++it) {
+            starts[i] = *it;
+            stops[i] = *(it + rank);
+            ++i;
+        }
+    }
+    inline CoordinateType area() const {
+        CoordinateType area = 1;
+        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) { area *= (stops[i] - starts[i]); });
+
+        return area;
+    }
+};
 
 template <typename CoordinateType>
 struct bounding_box {

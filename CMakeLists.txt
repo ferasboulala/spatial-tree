@@ -19,12 +19,14 @@ if (${GTest_FOUND})
       ${test_name}
       PUBLIC
       ${CMAKE_SOURCE_DIR}
+      # Temporary, for Mac.
+      /usr/local/include/
      )
-     target_link_libraries(${test_name} gtest gtest_main)
+     target_link_libraries(${test_name} GTest::gtest_main)
      add_test(${test_name} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${test_name}")
    endfunction()
- 
-   create_test("utest" utest.cpp)
+
+   create_test("utest" src/utest.cpp)
 endif()
 
 find_package(benchmark CONFIG)
@@ -39,10 +41,10 @@ if (${benchmark_FOUND})
      target_link_libraries(${benchmark_name} benchmark::benchmark)
    endfunction()
  
-   create_benchmark("bench" bench.cpp)
+   create_benchmark("bench" src/bench.cpp)
 endif()
 
-add_executable("example" example.cpp)
+add_executable("example" src/example.cpp)
 
 find_package(OpenCV)
 if (DEFINED OpenCV_LIBRARIES)
@@ -57,5 +59,5 @@ if (DEFINED OpenCV_LIBRARIES)
       ${target_name}
       ${OpenCV_LIBRARIES})
   endfunction()
-  create_binary("interactive" interactive.cpp)
+  create_binary("interactive" src/interactive.cpp)
 endif()

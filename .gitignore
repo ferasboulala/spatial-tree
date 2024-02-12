@@ -4,3 +4,4 @@ build
 .vscode
 perf.*
 prof.*
+.DS_Store

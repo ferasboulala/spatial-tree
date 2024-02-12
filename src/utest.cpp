@@ -1,6 +1,7 @@
 #ifdef NDEBUG
 #undef NDEBUG
 #include "spatial-tree.h"
+#include "spatial-tree.tmp.h"
 #define NDEBUG
 #else
 #include "spatial-tree.h"
@@ -12,6 +13,37 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+
+TEST(TestUnroll, TestUnroll) {
+    int sum = 0;
+    st::internal::unroll_for<1>(1, 5, [&](auto i) { sum += i; });
+    ASSERT_EQ(sum, 10);
+
+    sum = 0;
+    st::internal::unroll_for<2>(1, 5, [&](int i) { sum += i; });
+    ASSERT_EQ(sum, 10);
+
+    sum = 0;
+    st::internal::unroll_for<3>(1, 5, [&](int i) { sum += i; });
+    ASSERT_EQ(sum, 10);
+
+    sum = 0;
+    st::internal::unroll_for<4>(1, 5, [&](int i) { sum += i; });
+    ASSERT_EQ(sum, 10);
+}
+
+TEST(TestBoundingBox, TestDefaultConstructor) {
+    st::bounding_box2<int, 3> bbox;
+    ASSERT_EQ(bbox.starts.size(), unsigned(3));
+    ASSERT_EQ(bbox.stops.size(), unsigned(3));
+}
+
+TEST(TestBoundingBox, TestConstructor) {
+    st::bounding_box2<int, 3> bbox{0, 0, 0, 3, 4, 5};
+    ASSERT_EQ(bbox.starts.size(), unsigned(3));
+    ASSERT_EQ(bbox.stops.size(), unsigned(3));
+    ASSERT_EQ(bbox.area(), unsigned(3 * 4 * 5));
+}
 
 TEST(TestEuclide, TestEuclideanDistanceDouble) {
     using namespace st::internal;
@@ -92,7 +124,7 @@ TEST(TestSpatialTree, UniqueInsertions) {
                 tree.clear();
             };
             CoordT                         bound = test_size;
-            const st::bounding_box<CoordT> bounds(-bound, bound, bound, -bound);
+            const st::bounding_box<CoordT> bounds({-bound, bound, bound, -bound});
 
             st::internal::spatial_tree<int, CoordT> bounded(bounds);
             inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
@@ -156,7 +188,7 @@ TEST(TestSpatialTree, UniqueDeletions) {
                 ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
             };
             CoordT                         bound = test_size;
-            const st::bounding_box<CoordT> bounds(-bound, bound, bound, -bound);
+            const st::bounding_box<CoordT> bounds({-bound, bound, bound, -bound});
 
             st::internal::spatial_tree<int, CoordT> bounded(bounds);
             inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
@@ -218,7 +250,7 @@ TEST(TestSpatialTree, RandomInsertionsAndDeletions) {
             }
         };
         const st::bounding_box<CoordT> bounds(
-            DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG);
+            {DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG});
 
         st::internal::spatial_tree<int, CoordT> bounded(bounds);
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
@@ -251,7 +283,8 @@ TEST(TestSpatialTree, IteratorCoverage) {
                 ASSERT_EQ(tree.size(), test_size);
                 ASSERT_EQ(std::distance(tree.begin(), tree.end()), test_size);
             };
-            const st::bounding_box<CoordT> bounds(-test_size, test_size, test_size, -test_size);
+            CoordT                         boundary = test_size;
+            const st::bounding_box<CoordT> bounds({-boundary, boundary, boundary, -boundary});
 
             st::internal::spatial_tree<int, CoordT> bounded(bounds);
             inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
@@ -291,7 +324,8 @@ TEST(TestSpatialTree, SingleFind) {
                     ASSERT_NE(tree.find(i, i), tree.end());
                 }
             };
-            const st::bounding_box<CoordT> bounds(-test_size, test_size, test_size, -test_size);
+            CoordT                         boundary = test_size;
+            const st::bounding_box<CoordT> bounds({-boundary, boundary, boundary, -boundary});
 
             st::internal::spatial_tree<int, CoordT> bounded(bounds);
             inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
@@ -363,7 +397,7 @@ TEST(TestSpatialTree, BBoxFind) {
             }
         };
         const st::bounding_box<CoordT> bounds(
-            DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG);
+            {DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG});
 
         st::internal::spatial_tree<int, CoordT> bounded(bounds);
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
