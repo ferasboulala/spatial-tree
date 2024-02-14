@@ -33,16 +33,58 @@ TEST(TestUnroll, TestUnroll) {
 }
 
 TEST(TestBoundingBox, TestDefaultConstructor) {
-    st::bounding_box2<int, 3> bbox;
+    const st::__bounding_box<int, 3> bbox;
     ASSERT_EQ(bbox.starts.size(), unsigned(3));
     ASSERT_EQ(bbox.stops.size(), unsigned(3));
 }
 
 TEST(TestBoundingBox, TestConstructor) {
-    st::bounding_box2<int, 3> bbox{0, 0, 0, 3, 4, 5};
+    const st::__bounding_box<int, 3> bbox({0, 0, 0, 3, 4, 5});
     ASSERT_EQ(bbox.starts.size(), unsigned(3));
     ASSERT_EQ(bbox.stops.size(), unsigned(3));
     ASSERT_EQ(bbox.area(), unsigned(3 * 4 * 5));
+}
+
+TEST(TestBoundingBox, Contains) {
+    const st::__bounding_box<int, 1> vec({0, 10});
+    ASSERT_TRUE(vec.contains({0}));
+    ASSERT_TRUE(vec.contains({5}));
+    ASSERT_TRUE(vec.contains({10}));
+    ASSERT_FALSE(vec.contains({11}));
+
+    const st::__bounding_box<int, 2> mat({0, 0, 10, 10});
+    ASSERT_TRUE(mat.contains({0, 0}));
+    ASSERT_TRUE(mat.contains({0, 5}));
+    ASSERT_TRUE(mat.contains({5, 0}));
+    ASSERT_TRUE(mat.contains({10, 10}));
+    ASSERT_FALSE(mat.contains({11, 0}));
+    ASSERT_FALSE(mat.contains({0, 11}));
+}
+
+TEST(TestBoundingBox, Overlaps) {
+    const st::__bounding_box<int, 2> lhs({0, 0, 10, 10});
+    ASSERT_TRUE(lhs.overlaps(lhs));
+
+    for (int i = -10; i < -5; ++i) {
+        const st::__bounding_box<int, 2> rhs({i, i, i + 5, i + 5});
+        ASSERT_TRUE(rhs.overlaps(rhs));
+        ASSERT_FALSE(lhs.overlaps(rhs));
+        ASSERT_FALSE(rhs.overlaps(lhs));
+    }
+
+    for (int i = -5; i < 10; ++i) {
+        const st::__bounding_box<int, 2> rhs({i, i, i + 5, i + 5});
+        ASSERT_TRUE(rhs.overlaps(rhs));
+        ASSERT_TRUE(lhs.overlaps(rhs));
+        ASSERT_TRUE(rhs.overlaps(lhs));
+    }
+
+    for (int i = 11; i < 15; ++i) {
+        const st::__bounding_box<int, 2> rhs({i, i, i + 5, i + 5});
+        ASSERT_TRUE(rhs.overlaps(rhs));
+        ASSERT_FALSE(lhs.overlaps(rhs));
+        ASSERT_FALSE(rhs.overlaps(lhs));
+    }
 }
 
 TEST(TestEuclide, TestEuclideanDistanceDouble) {

@@ -23,7 +23,6 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
-#include <initializer_list>
 #include <limits>
 #include <numeric>
 #include <tuple>
@@ -47,57 +46,6 @@ inline void unroll_for(InductionVarType start, InductionVarType stop, const Func
         __unroll_2 for (InductionVarType i = start; i < stop; ++i) { func(i); }
     }
 }
-
-}  // namespace internal
-
-// When replacing the other bounding_box, be sure to check operand order.
-template <typename CoordinateType, uint64_t rank = 2>
-struct bounding_box2 {
-    std::array<CoordinateType, rank> starts;
-    std::array<CoordinateType, rank> stops;
-    inline bounding_box2() {
-        starts.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
-        stops.fill(std::numeric_limits<CoordinateType>::max() / 2);
-    }
-    inline bounding_box2(std::initializer_list<CoordinateType> boundaries) {
-        uint64_t i = 0;
-        for (auto it = boundaries.begin(); it != boundaries.begin() + rank; ++it) {
-            starts[i] = *it;
-            stops[i] = *(it + rank);
-            ++i;
-        }
-    }
-    inline CoordinateType area() const {
-        CoordinateType area = 1;
-        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) { area *= (stops[i] - starts[i]); });
-
-        return area;
-    }
-};
-
-template <typename CoordinateType>
-struct bounding_box {
-    CoordinateType top_x, top_y, bottom_x, bottom_y;
-    inline bounding_box()
-        : top_x(std::numeric_limits<CoordinateType>::lowest() / 2),
-          top_y(std::numeric_limits<CoordinateType>::max() / 2),
-          bottom_x(std::numeric_limits<CoordinateType>::max() / 2),
-          bottom_y(std::numeric_limits<CoordinateType>::lowest() / 2) {
-        assert(top_x <= bottom_x);
-        assert(top_y >= bottom_y);
-    }
-    inline bounding_box(CoordinateType top_x_,
-                        CoordinateType top_y_,
-                        CoordinateType bottom_x_,
-                        CoordinateType bottom_y_)
-        : top_x(top_x_), top_y(top_y_), bottom_x(bottom_x_), bottom_y(bottom_y_) {
-        assert(top_x <= bottom_x);
-        assert(top_y >= bottom_y);
-    }
-    inline CoordinateType area() const { return (bottom_x - top_x) * (top_y - bottom_y); }
-};
-
-namespace internal {
 
 template <typename AbsDiff, typename T, typename... Args>
 static inline T euclidean_distance_squared_impl(AbsDiff) {
@@ -152,14 +100,6 @@ static inline bool is_within_interval(CoordinateType x, CoordinateType beg, Coor
 }
 
 template <typename CoordinateType>
-static inline bool is_inside_bounding_box(CoordinateType                      x,
-                                          CoordinateType                      y,
-                                          const bounding_box<CoordinateType> &bbox) {
-    return is_within_interval(x, bbox.top_x, bbox.bottom_x) &&
-           is_within_interval(y, bbox.bottom_y, bbox.top_y);
-}
-
-template <typename CoordinateType>
 static inline bool intervals_overlap(CoordinateType lhs_beg,
                                      CoordinateType lhs_end,
                                      CoordinateType rhs_beg,
@@ -170,6 +110,128 @@ static inline bool intervals_overlap(CoordinateType lhs_beg,
     return !((lhs_beg > rhs_end) || (lhs_end < rhs_beg));
 }
 
+}  // namespace internal
+
+// When replacing the other bounding_box, be sure to check operand order.
+template <typename CoordinateType, uint64_t rank = 2>
+struct __bounding_box {
+    std::array<CoordinateType, rank> starts;
+    std::array<CoordinateType, rank> stops;
+    inline __bounding_box() {
+        starts.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
+        stops.fill(std::numeric_limits<CoordinateType>::max() / 2);
+    }
+
+    inline __bounding_box(std::array<CoordinateType, rank * 2> boundaries) {
+        internal::unroll_for<rank>(uint64_t(0), rank, [&](uint64_t i) {
+            assert(boundaries[i] >= std::numeric_limits<CoordinateType>::lowest() / 2);
+            assert(boundaries[i + rank] <= std::numeric_limits<CoordinateType>::max() / 2);
+
+            starts[i] = boundaries[i];
+            stops[i] = boundaries[i + rank];
+        });
+    }
+
+    inline CoordinateType area() const {
+        CoordinateType area = 1;
+        internal::unroll_for<rank>(
+            uint64_t(0), rank, [&](auto i) { area *= (stops[i] - starts[i]); });
+
+        return area;
+    }
+
+    inline bool contains(std::array<CoordinateType, rank> point) const {
+        for (uint64_t i = 0; i < rank; ++i) {
+            if (!internal::is_within_interval(point[i], starts[i], stops[i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    inline bool overlaps(const __bounding_box<CoordinateType, rank> &other) const {
+        for (uint64_t i = 0; i < rank; ++i) {
+            if (!internal::intervals_overlap(
+                    starts[i], stops[i], other.starts[i], other.stops[i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+};
+
+namespace internal {
+
+template <typename StorageType = void,
+          typename CoordinateType = int,
+          uint8_t MAXIMUM_NODE_SIZE = 32>
+class __spatial_tree {
+public:
+    static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
+
+    __spatial_tree() { clear(); }
+    __spatial_tree(const __bounding_box<CoordinateType> &boundaries) : boundaries_(boundaries) {
+        clear();
+    }
+
+    ~__spatial_tree() = default;
+
+    inline uint64_t size() const {
+        return 0;
+        // assert(nodes_.size());
+        // const auto &root = nodes_.front();
+        // if (root.is_a_leaf()) {
+        //     return root.leaf.size;
+        // }
+        // return root.branch.size;
+    }
+    inline bool empty() const { return size() == 0; }
+    inline void clear() {
+        // nodes_.resize(1);
+        // nodes_.front().reset();
+        freed_nodes_.clear();
+    }
+
+private:
+    const __bounding_box<CoordinateType> boundaries_;
+    // std::vector<tree_node>             nodes_;
+    std::vector<uint64_t>              freed_nodes_;
+};
+
+}  // namespace internal
+
+///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
+////////////////////////////WIP////////////////////////////////
+///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
+
+template <typename CoordinateType>
+struct bounding_box {
+    CoordinateType top_x, top_y, bottom_x, bottom_y;
+    inline bounding_box()
+        : top_x(std::numeric_limits<CoordinateType>::lowest() / 2),
+          top_y(std::numeric_limits<CoordinateType>::max() / 2),
+          bottom_x(std::numeric_limits<CoordinateType>::max() / 2),
+          bottom_y(std::numeric_limits<CoordinateType>::lowest() / 2) {
+        assert(top_x <= bottom_x);
+        assert(top_y >= bottom_y);
+    }
+    inline bounding_box(CoordinateType top_x_,
+                        CoordinateType top_y_,
+                        CoordinateType bottom_x_,
+                        CoordinateType bottom_y_)
+        : top_x(top_x_), top_y(top_y_), bottom_x(bottom_x_), bottom_y(bottom_y_) {
+        assert(top_x <= bottom_x);
+        assert(top_y >= bottom_y);
+    }
+    inline CoordinateType area() const { return (bottom_x - top_x) * (top_y - bottom_y); }
+};
+
+namespace internal {
+
 template <typename CoordinateType>
 static inline bool bounding_boxes_overlap(const bounding_box<CoordinateType> &lhs,
                                           const bounding_box<CoordinateType> &rhs) {
@@ -177,12 +239,20 @@ static inline bool bounding_boxes_overlap(const bounding_box<CoordinateType> &lh
            intervals_overlap(lhs.bottom_y, lhs.top_y, rhs.bottom_y, rhs.top_y);
 }
 
+template <typename CoordinateType>
+static inline bool is_inside_bounding_box(CoordinateType                      x,
+                                          CoordinateType                      y,
+                                          const bounding_box<CoordinateType> &bbox) {
+    return is_within_interval(x, bbox.top_x, bbox.bottom_x) &&
+           is_within_interval(y, bbox.bottom_y, bbox.top_y);
+}
+
 template <typename StorageType = void,
           typename CoordinateType = int,
           uint8_t MAXIMUM_NODE_SIZE = 32>
 class spatial_tree {
 public:
-    static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
+    static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 0");
 
     spatial_tree()
         // Dividing by 2 to be able to do (upper bound +/- lower bound) without overflowing.
