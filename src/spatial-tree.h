@@ -115,6 +115,8 @@ static inline bool intervals_overlap(CoordinateType lhs_beg,
 // When replacing the other bounding_box, be sure to check operand order.
 template <typename CoordinateType, uint64_t rank = 2>
 struct __bounding_box {
+    static_assert(rank > 0);
+
     std::array<CoordinateType, rank> starts;
     std::array<CoordinateType, rank> stops;
     inline __bounding_box() {
@@ -160,19 +162,37 @@ struct __bounding_box {
 
         return true;
     }
+
+    inline uint64_t quadrant(std::array<CoordinateType, rank> point) const {
+        assert(contains(point));
+
+        std::array<CoordinateType, rank> origins;
+        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+            origins[i] = (stops[i] - starts[i]) / 2 + starts[i];
+        });
+
+        uint64_t quadrant = 0;
+        internal::unroll_for<rank>(
+            uint64_t(0), rank, [&](auto i) { quadrant |= (point[i] > origins[i]) << i; });
+
+        return quadrant;
+    }
 };
 
 namespace internal {
 
 template <typename StorageType = void,
           typename CoordinateType = int,
-          uint8_t MAXIMUM_NODE_SIZE = 32>
+          uint64_t rank = 2,
+          uint8_t  MAXIMUM_NODE_SIZE = 32>
 class __spatial_tree {
 public:
+    static_assert(rank > 0, "Rank must be greater than 0");
     static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
 
     __spatial_tree() { clear(); }
-    __spatial_tree(const __bounding_box<CoordinateType> &boundaries) : boundaries_(boundaries) {
+    __spatial_tree(const __bounding_box<CoordinateType, rank> &boundaries)
+        : boundaries_(boundaries) {
         clear();
     }
 
@@ -180,24 +200,156 @@ public:
 
     inline uint64_t size() const {
         return 0;
-        // assert(nodes_.size());
-        // const auto &root = nodes_.front();
-        // if (root.is_a_leaf()) {
-        //     return root.leaf.size;
-        // }
-        // return root.branch.size;
+        assert(nodes_.size());
+        const auto &root = nodes_.front();
+        if (root.is_a_leaf()) {
+            return root.leaf.size;
+        }
+        return root.branch.size;
     }
     inline bool empty() const { return size() == 0; }
     inline void clear() {
-        // nodes_.resize(1);
-        // nodes_.front().reset();
+        nodes_.resize(1);
+        nodes_.front().reset();
         freed_nodes_.clear();
     }
 
+    struct iterator {
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using difference_type = std::ptrdiff_t;
+        using value_type = iterator;
+        using pointer = value_type *;
+        using reference = value_type &;
+
+        inline iterator(const __spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree,
+                        uint64_t node_index,
+                        uint8_t  item_index)
+            : tree_(tree), node_index_(node_index), item_index_(item_index) {}
+        inline iterator(const __spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree)
+            : tree_(tree) {
+            end();
+        }
+        inline ~iterator() = default;
+
+        inline auto operator*() const { return tree_->operator()(node_index_, item_index_); }
+        inline auto operator*() {
+            return const_cast<__spatial_tree *>(tree_)->operator()(node_index_, item_index_);
+        }
+        inline auto operator->() const { return this->operator(); }
+        inline auto operator->() { return this->operator(); }
+
+        iterator &operator++() {
+            assert(node_index_ != tree_node::NO_INDEX);
+            assert(node_index_ < tree_->nodes_.size());
+
+            const tree_node *node = &tree_->nodes_[node_index_];
+            // TODO: Make the is_leaf member variable an enum for the freed case to skip 4 leaves at
+            // a time.
+            if (node->is_a_leaf() && ++item_index_ < node->leaf.size) {
+                return *this;
+            }
+
+            do {
+                ++node_index_;
+                node = &tree_->nodes_[node_index_];
+                item_index_ = 0;
+            } while ((node->is_a_branch() || !node->leaf.size) &&
+                     node_index_ < tree_->nodes_.size());
+
+            if (node_index_ == tree_->nodes_.size()) end();
+
+            return *this;
+        }
+
+        inline bool operator==(const iterator &other) const {
+            assert(tree_ == other.tree_);
+            return node_index_ == other.node_index_ && item_index_ == other.item_index_;
+        }
+
+        inline bool operator!=(const iterator &other) const { return !(*this == other); }
+
+    private:
+        inline void end() {
+            node_index_ = tree_node::NO_INDEX;
+            item_index_ = 0;
+        }
+
+        const __spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree_;
+
+        uint64_t node_index_;
+        uint8_t  item_index_;
+    };
+
 private:
-    const __bounding_box<CoordinateType> boundaries_;
-    // std::vector<tree_node>             nodes_;
-    std::vector<uint64_t>              freed_nodes_;
+    using cartesian_quadrant = int;
+
+    struct tree_node_with_storage {
+        std::array<CoordinateType, rank> coordinates;
+        StorageType                      storage;
+
+        template <typename... Args>
+        inline tree_node_with_storage(std::array<CoordinateType, rank> coords, Args &&...args)
+            : coordinates(coords), storage(std::forward<Args>(args)...) {}
+    };
+
+    struct tree_node_no_storage {
+        std::array<CoordinateType, rank> coordinates;
+        inline tree_node_no_storage(std::array<CoordinateType, rank> coords)
+            : coordinates(coords) {}
+    };
+
+    struct tree_node_storage : std::conditional<std::is_void_v<StorageType>,
+                                                tree_node_no_storage,
+                                                tree_node_with_storage>::type {};
+
+    struct tree_node_leaf {
+        std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
+        uint8_t                                          size;
+    };
+
+    struct tree_node_branch {
+        // Children are adjacent in memory.
+        uint64_t index_of_first_child;
+        uint64_t size;
+    };
+
+    struct tree_node {
+        static constexpr uint64_t NO_INDEX = std::numeric_limits<uint64_t>::max();
+        union {
+            tree_node_leaf   leaf;
+            tree_node_branch branch;
+        };
+        bool is_branch;
+
+        inline tree_node() { reset(); }
+        inline tree_node(tree_node &&other) : is_branch(other.is_branch) {
+            if (is_a_branch()) {
+                branch = std::move(other.branch);
+            } else {
+                leaf = std::move(other.leaf);
+            }
+        }
+        inline ~tree_node() {
+            if constexpr (!std::is_void_v<StorageType>) {
+                if (is_a_leaf()) {
+                    __unroll_4 for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
+                        leaf.items[i].storage.~StorageType();
+                    }
+                }
+            }
+        }
+        inline bool is_a_branch() const { return is_branch; }
+        inline bool is_a_leaf() const { return !is_a_branch(); }
+        inline void reset() {
+            leaf.size = 0;
+            is_branch = false;
+        }
+    };
+
+    const __bounding_box<CoordinateType, rank> boundaries_;
+    std::vector<tree_node>                     nodes_;
+    std::vector<uint64_t>                      freed_nodes_;
 };
 
 }  // namespace internal

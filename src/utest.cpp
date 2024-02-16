@@ -15,76 +15,136 @@
 #include <vector>
 
 TEST(TestUnroll, TestUnroll) {
-    int sum = 0;
-    st::internal::unroll_for<1>(1, 5, [&](auto i) { sum += i; });
-    ASSERT_EQ(sum, 10);
+    const auto typed_test = [&]<typename CoordT>() {
+        CoordT start = 1;
+        CoordT stop = 5;
+        CoordT sum = 0;
 
-    sum = 0;
-    st::internal::unroll_for<2>(1, 5, [&](int i) { sum += i; });
-    ASSERT_EQ(sum, 10);
+        st::internal::unroll_for<1>(start, stop, [&](CoordT i) { sum += i; });
+        ASSERT_EQ(sum, 10);
 
-    sum = 0;
-    st::internal::unroll_for<3>(1, 5, [&](int i) { sum += i; });
-    ASSERT_EQ(sum, 10);
+        sum = 0;
+        st::internal::unroll_for<2>(start, stop, [&](CoordT i) { sum += i; });
+        ASSERT_EQ(sum, 10);
 
-    sum = 0;
-    st::internal::unroll_for<4>(1, 5, [&](int i) { sum += i; });
-    ASSERT_EQ(sum, 10);
+        sum = 0;
+        st::internal::unroll_for<3>(start, stop, [&](CoordT i) { sum += i; });
+        ASSERT_EQ(sum, 10);
+
+        sum = 0;
+        st::internal::unroll_for<4>(start, stop, [&](CoordT i) { sum += i; });
+        ASSERT_EQ(sum, 10);
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
 }
 
 TEST(TestBoundingBox, TestDefaultConstructor) {
-    const st::__bounding_box<int, 3> bbox;
-    ASSERT_EQ(bbox.starts.size(), unsigned(3));
-    ASSERT_EQ(bbox.stops.size(), unsigned(3));
+    const auto typed_test = [&]<typename CoordT>() {
+        const st::__bounding_box<CoordT, 3> bbox;
+        ASSERT_EQ(bbox.starts.size(), CoordT(3));
+        ASSERT_EQ(bbox.stops.size(), CoordT(3));
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
 }
 
 TEST(TestBoundingBox, TestConstructor) {
-    const st::__bounding_box<int, 3> bbox({0, 0, 0, 3, 4, 5});
-    ASSERT_EQ(bbox.starts.size(), unsigned(3));
-    ASSERT_EQ(bbox.stops.size(), unsigned(3));
-    ASSERT_EQ(bbox.area(), unsigned(3 * 4 * 5));
+    const auto typed_test = [&]<typename CoordT>() {
+        const st::__bounding_box<CoordT, 3> bbox({0, 0, 0, 3, 4, 5});
+        ASSERT_EQ(bbox.starts.size(), CoordT(3));
+        ASSERT_EQ(bbox.stops.size(), CoordT(3));
+        ASSERT_EQ(bbox.area(), CoordT(3 * 4 * 5));
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
 }
 
 TEST(TestBoundingBox, Contains) {
-    const st::__bounding_box<int, 1> vec({0, 10});
-    ASSERT_TRUE(vec.contains({0}));
-    ASSERT_TRUE(vec.contains({5}));
-    ASSERT_TRUE(vec.contains({10}));
-    ASSERT_FALSE(vec.contains({11}));
+    const auto typed_test = [&]<typename CoordT>() {
+        const st::__bounding_box<CoordT, 1> vec({0, 10});
+        ASSERT_TRUE(vec.contains({0}));
+        ASSERT_TRUE(vec.contains({5}));
+        ASSERT_TRUE(vec.contains({10}));
+        ASSERT_FALSE(vec.contains({11}));
 
-    const st::__bounding_box<int, 2> mat({0, 0, 10, 10});
-    ASSERT_TRUE(mat.contains({0, 0}));
-    ASSERT_TRUE(mat.contains({0, 5}));
-    ASSERT_TRUE(mat.contains({5, 0}));
-    ASSERT_TRUE(mat.contains({10, 10}));
-    ASSERT_FALSE(mat.contains({11, 0}));
-    ASSERT_FALSE(mat.contains({0, 11}));
+        const st::__bounding_box<CoordT, 2> mat({0, 0, 10, 10});
+        ASSERT_TRUE(mat.contains({0, 0}));
+        ASSERT_TRUE(mat.contains({0, 5}));
+        ASSERT_TRUE(mat.contains({5, 0}));
+        ASSERT_TRUE(mat.contains({10, 10}));
+        ASSERT_FALSE(mat.contains({11, 0}));
+        ASSERT_FALSE(mat.contains({0, 11}));
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
 }
 
 TEST(TestBoundingBox, Overlaps) {
-    const st::__bounding_box<int, 2> lhs({0, 0, 10, 10});
-    ASSERT_TRUE(lhs.overlaps(lhs));
+    const auto typed_test = [&]<typename CoordT>() {
+        const st::__bounding_box<CoordT, 2> lhs({0, 0, 10, 10});
+        ASSERT_TRUE(lhs.overlaps(lhs));
 
-    for (int i = -10; i < -5; ++i) {
-        const st::__bounding_box<int, 2> rhs({i, i, i + 5, i + 5});
-        ASSERT_TRUE(rhs.overlaps(rhs));
-        ASSERT_FALSE(lhs.overlaps(rhs));
-        ASSERT_FALSE(rhs.overlaps(lhs));
-    }
+        for (CoordT i = -10; i < -5; ++i) {
+            const st::__bounding_box<CoordT, 2> rhs({i, i, i + 5, i + 5});
+            ASSERT_TRUE(rhs.overlaps(rhs));
+            ASSERT_FALSE(lhs.overlaps(rhs));
+            ASSERT_FALSE(rhs.overlaps(lhs));
+        }
 
-    for (int i = -5; i < 10; ++i) {
-        const st::__bounding_box<int, 2> rhs({i, i, i + 5, i + 5});
-        ASSERT_TRUE(rhs.overlaps(rhs));
-        ASSERT_TRUE(lhs.overlaps(rhs));
-        ASSERT_TRUE(rhs.overlaps(lhs));
-    }
+        for (CoordT i = -5; i < 10; ++i) {
+            const st::__bounding_box<CoordT, 2> rhs({i, i, i + 5, i + 5});
+            ASSERT_TRUE(rhs.overlaps(rhs));
+            ASSERT_TRUE(lhs.overlaps(rhs));
+            ASSERT_TRUE(rhs.overlaps(lhs));
+        }
 
-    for (int i = 11; i < 15; ++i) {
-        const st::__bounding_box<int, 2> rhs({i, i, i + 5, i + 5});
-        ASSERT_TRUE(rhs.overlaps(rhs));
-        ASSERT_FALSE(lhs.overlaps(rhs));
-        ASSERT_FALSE(rhs.overlaps(lhs));
-    }
+        for (CoordT i = 11; i < 15; ++i) {
+            const st::__bounding_box<CoordT, 2> rhs({i, i, i + 5, i + 5});
+            ASSERT_TRUE(rhs.overlaps(rhs));
+            ASSERT_FALSE(lhs.overlaps(rhs));
+            ASSERT_FALSE(rhs.overlaps(lhs));
+        }
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
+}
+
+// TODO: Do tests for float too.
+TEST(TestBoundingBox, BelongsToQuadrant) {
+    const auto typed_test = [&]<typename CoordT>() {
+        const st::__bounding_box<CoordT, 1> bbox1({0, 10});
+        for (CoordT i = 0; i <= 5; ++i) {
+            ASSERT_EQ(bbox1.quadrant({i}), 0);
+        }
+
+        for (CoordT i = 6; i <= 10; ++i) {
+            ASSERT_EQ(bbox1.quadrant({i}), 1);
+        }
+
+        const st::__bounding_box<CoordT, 2> bbox2({0, 0, 10, 10});
+        for (CoordT i = 0; i <= 5; ++i) {
+            ASSERT_EQ(bbox2.quadrant({i, i}), 0);
+        }
+
+        for (CoordT i = 6; i <= 10; ++i) {
+            ASSERT_EQ(bbox2.quadrant({i, i}), 3);
+        }
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
 }
 
 TEST(TestEuclide, TestEuclideanDistanceDouble) {
