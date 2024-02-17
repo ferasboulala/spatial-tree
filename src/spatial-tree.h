@@ -115,10 +115,11 @@ static inline bool intervals_overlap(CoordinateType lhs_beg,
 // When replacing the other bounding_box, be sure to check operand order.
 template <typename CoordinateType, uint64_t rank = 2>
 struct __bounding_box {
-    static_assert(rank > 0);
+    static_assert(rank > 0 && rank <= sizeof(uint64_t) * 8);
 
     std::array<CoordinateType, rank> starts;
     std::array<CoordinateType, rank> stops;
+
     inline __bounding_box() {
         starts.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
         stops.fill(std::numeric_limits<CoordinateType>::max() / 2);
@@ -132,6 +133,11 @@ struct __bounding_box {
             starts[i] = boundaries[i];
             stops[i] = boundaries[i + rank];
         });
+    }
+
+    inline bool operator==(const __bounding_box<CoordinateType, rank> &other) const {
+        return !std::memcmp(starts.begin(), other.starts.begin(), sizeof(starts)) &&
+               !std::memcmp(stops.begin(), other.stops.begin(), sizeof(stops));
     }
 
     inline CoordinateType area() const {
@@ -163,19 +169,71 @@ struct __bounding_box {
         return true;
     }
 
-    inline uint64_t quadrant(std::array<CoordinateType, rank> point) const {
-        assert(contains(point));
-
+    inline std::array<CoordinateType, rank> origin() const {
         std::array<CoordinateType, rank> origins;
         internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
             origins[i] = (stops[i] - starts[i]) / 2 + starts[i];
         });
 
-        uint64_t quadrant = 0;
+        return origins;
+    }
+
+    inline uint64_t quadrant(std::array<CoordinateType, rank> point) const {
+        assert(contains(point));
+
+        // Contract: lower region is ceiled, upper region is floored. (<)
+        uint64_t   quadrant = 0;
+        const auto origins = origin();
         internal::unroll_for<rank>(
             uint64_t(0), rank, [&](auto i) { quadrant |= (point[i] > origins[i]) << i; });
 
         return quadrant;
+    }
+
+    inline std::tuple<__bounding_box<CoordinateType, rank>, uint64_t> recurse(
+        std::array<CoordinateType, rank> point) const {
+        assert(contains(point));
+
+        const auto                           origins = origin();
+        uint64_t                             quadrant = 0;
+        std::array<CoordinateType, rank * 2> boundaries;
+        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+            CoordinateType span = stops[i] - starts[i];
+            CoordinateType new_span = span / 2;
+            CoordinateType remainder = span - 2 * new_span;
+
+            bool gt = point[i] > origins[i];
+            if (gt) {
+                boundaries[i] = starts[i] + new_span;
+                boundaries[i + rank] = stops[i];
+                quadrant |= (1 << i);
+            } else {
+                boundaries[i] = starts[i];
+                boundaries[i + rank] = stops[i] - (new_span + remainder);
+            }
+        });
+
+        return {__bounding_box<CoordinateType, rank>(boundaries), quadrant};
+    }
+
+    inline __bounding_box<CoordinateType, rank> qrecurse(uint64_t quad) const {
+        assert(quad < std::pow(2, rank));
+        std::array<CoordinateType, rank * 2> boundaries;
+        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+            CoordinateType span = stops[i] - starts[i];
+            CoordinateType new_span = span / 2;
+            CoordinateType remainder = span - 2 * new_span;
+
+            if (quad & (1 << i)) {
+                boundaries[i] = starts[i] + new_span;
+                boundaries[i + rank] = stops[i];
+            } else {
+                boundaries[i] = starts[i];
+                boundaries[i + rank] = stops[i] - (new_span + remainder);
+            }
+        });
+
+        return __bounding_box<CoordinateType, rank>(boundaries);
     }
 };
 
@@ -187,7 +245,8 @@ template <typename StorageType = void,
           uint8_t  MAXIMUM_NODE_SIZE = 32>
 class __spatial_tree {
 public:
-    static_assert(rank > 0, "Rank must be greater than 0");
+    static_assert(rank > 0 && rank <= sizeof(uint64_t) * 8,
+                  "Rank must be greater than 0 and less than 64");
     static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
 
     __spatial_tree() { clear(); }

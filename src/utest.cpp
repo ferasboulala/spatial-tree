@@ -120,7 +120,6 @@ TEST(TestBoundingBox, Overlaps) {
     typed_test.operator()<int>();
 }
 
-// TODO: Do tests for float too.
 TEST(TestBoundingBox, BelongsToQuadrant) {
     const auto typed_test = [&]<typename CoordT>() {
         const st::__bounding_box<CoordT, 1> bbox1({0, 10});
@@ -140,6 +139,54 @@ TEST(TestBoundingBox, BelongsToQuadrant) {
         for (CoordT i = 6; i <= 10; ++i) {
             ASSERT_EQ(bbox2.quadrant({i, i}), 3);
         }
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
+}
+
+TEST(TestBoundingBox, QRecurse) {
+    const auto typed_test = [&]<typename CoordT>() {
+        const st::__bounding_box<CoordT, 1> bbox1({0, 10});
+        ASSERT_EQ(bbox1.qrecurse(0), (st::__bounding_box<CoordT, 1>({0, 5})));
+        ASSERT_EQ(bbox1.qrecurse(1), (st::__bounding_box<CoordT, 1>({5, 10})));
+
+        const st::__bounding_box<CoordT, 2> bbox2({0, 0, 10, 10});
+        ASSERT_EQ(bbox2.qrecurse(0), (st::__bounding_box<CoordT, 2>({0, 0, 5, 5})));
+        ASSERT_EQ(bbox2.qrecurse(1), (st::__bounding_box<CoordT, 2>({5, 0, 10, 5})));
+        ASSERT_EQ(bbox2.qrecurse(2), (st::__bounding_box<CoordT, 2>({0, 5, 5, 10})));
+        ASSERT_EQ(bbox2.qrecurse(3), (st::__bounding_box<CoordT, 2>({5, 5, 10, 10})));
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
+}
+
+TEST(TestBoundingBox, Recurse) {
+    const auto typed_test = [&]<typename CoordT>() {
+        const st::__bounding_box<CoordT, 1> bbox1({0, 10});
+        ASSERT_EQ(std::get<0>(bbox1.recurse({2})), (st::__bounding_box<CoordT, 1>({0, 5})));
+        ASSERT_EQ(std::get<0>(bbox1.recurse({7})), (st::__bounding_box<CoordT, 1>({5, 10})));
+
+        ASSERT_EQ(std::get<1>(bbox1.recurse({2})), 0);
+        ASSERT_EQ(std::get<1>(bbox1.recurse({7})), 1);
+
+        const st::__bounding_box<CoordT, 2> bbox2({0, 0, 10, 10});
+        ASSERT_EQ(std::get<0>(bbox2.recurse({2, 2})),
+                  (st::__bounding_box<CoordT, 2>({0, 0, 5, 5})));
+        ASSERT_EQ(std::get<0>(bbox2.recurse({7, 2})),
+                  (st::__bounding_box<CoordT, 2>({5, 0, 10, 5})));
+        ASSERT_EQ(std::get<0>(bbox2.recurse({2, 7})),
+                  (st::__bounding_box<CoordT, 2>({0, 5, 5, 10})));
+        ASSERT_EQ(std::get<0>(bbox2.recurse({7, 7})),
+                  (st::__bounding_box<CoordT, 2>({5, 5, 10, 10})));
+
+        ASSERT_EQ(std::get<1>(bbox2.recurse({2, 2})), 0);
+        ASSERT_EQ(std::get<1>(bbox2.recurse({7, 2})), 1);
+        ASSERT_EQ(std::get<1>(bbox2.recurse({2, 7})), 2);
+        ASSERT_EQ(std::get<1>(bbox2.recurse({7, 7})), 3);
     };
 
     typed_test.operator()<float>();
