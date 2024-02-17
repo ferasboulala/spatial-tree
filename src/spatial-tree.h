@@ -365,6 +365,29 @@ private:
     struct tree_node_leaf {
         std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
         uint8_t                                          size;
+
+        tree_node_leaf(const tree_node_leaf &other) {
+            for (uint64_t i = 0; i < size; ++i) {
+                items[i] = other.items[i];
+            }
+            size = other.size;
+        }
+
+        tree_node_leaf(tree_node_leaf &&other) {
+            for (uint64_t i = 0; i < size; ++i) {
+                items[i] = std::move(other.items[i]);
+            }
+            size = other.size;
+        }
+
+        tree_node_leaf() = default;
+        ~tree_node_leaf() {
+            for (uint64_t i = 0; i < size; ++i) {
+                items[i].~tree_node_storage();
+            }
+        }
+
+        tree_node_leaf &operator=(tree_node_leaf &&) = default;
     };
 
     struct tree_node_branch {
@@ -390,12 +413,8 @@ private:
             }
         }
         inline ~tree_node() {
-            if constexpr (!std::is_void_v<StorageType>) {
-                if (is_a_leaf()) {
-                    __unroll_4 for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
-                        leaf.items[i].storage.~StorageType();
-                    }
-                }
+            if (is_a_leaf()) {
+                leaf.~tree_node_leaf();
             }
         }
         inline bool is_a_branch() const { return is_branch; }
@@ -652,6 +671,29 @@ private:
     struct tree_node_leaf {
         std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
         uint8_t                                          size;
+
+        tree_node_leaf(const tree_node_leaf &other) {
+            for (uint64_t i = 0; i < size; ++i) {
+                items[i] = other.items[i];
+            }
+            size = other.size;
+        }
+
+        tree_node_leaf(tree_node_leaf &&other) {
+            for (uint64_t i = 0; i < size; ++i) {
+                items[i] = std::move(other.items[i]);
+            }
+            size = other.size;
+        }
+
+        tree_node_leaf() = default;
+        ~tree_node_leaf() {
+            for (uint64_t i = 0; i < size; ++i) {
+                items[i].~tree_node_storage();
+            }
+        }
+
+        tree_node_leaf &operator=(tree_node_leaf &&) = default;
     };
 
     struct tree_node_branch {
@@ -677,12 +719,8 @@ private:
             }
         }
         inline ~tree_node() {
-            if constexpr (!std::is_void_v<StorageType>) {
-                if (is_a_leaf()) {
-                    __unroll_4 for (uint64_t i = 0; i < MAXIMUM_NODE_SIZE; ++i) {
-                        leaf.items[i].storage.~StorageType();
-                    }
-                }
+            if (is_a_leaf()) {
+                leaf.~tree_node_leaf();
             }
         }
         inline bool is_a_branch() const { return is_branch; }
