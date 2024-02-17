@@ -93,13 +93,18 @@ static inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
     }
 }
 
-template <typename CoordinateType>
+template <typename CoordinateType, bool strict = false>
 static inline bool is_within_interval(CoordinateType x, CoordinateType beg, CoordinateType end) {
     assert(end >= beg);
-    return x >= beg && x <= end;
+
+    if constexpr (strict) {
+        return x > beg && x < end;
+    } else {
+        return x >= beg && x <= end;
+    }
 }
 
-template <typename CoordinateType>
+template <typename CoordinateType, bool strict = false>
 static inline bool intervals_overlap(CoordinateType lhs_beg,
                                      CoordinateType lhs_end,
                                      CoordinateType rhs_beg,
@@ -107,7 +112,11 @@ static inline bool intervals_overlap(CoordinateType lhs_beg,
     assert(lhs_beg <= lhs_end);
     assert(rhs_beg <= rhs_end);
 
-    return !((lhs_beg > rhs_end) || (lhs_end < rhs_beg));
+    if constexpr (strict) {
+        return !((lhs_beg >= rhs_end) || (lhs_end <= rhs_beg));
+    } else {
+        return !((lhs_beg > rhs_end) || (lhs_end < rhs_beg));
+    }
 }
 
 }  // namespace internal
@@ -148,9 +157,11 @@ struct __bounding_box {
         return area;
     }
 
+    template <bool strict = false>
     inline bool contains(std::array<CoordinateType, rank> point) const {
         for (uint64_t i = 0; i < rank; ++i) {
-            if (!internal::is_within_interval(point[i], starts[i], stops[i])) {
+            if (!internal::is_within_interval<CoordinateType, strict>(
+                    point[i], starts[i], stops[i])) {
                 return false;
             }
         }
@@ -158,9 +169,10 @@ struct __bounding_box {
         return true;
     }
 
+    template <bool strict = false>
     inline bool overlaps(const __bounding_box<CoordinateType, rank> &other) const {
         for (uint64_t i = 0; i < rank; ++i) {
-            if (!internal::intervals_overlap(
+            if (!internal::intervals_overlap<CoordinateType, strict>(
                     starts[i], stops[i], other.starts[i], other.stops[i])) {
                 return false;
             }
@@ -234,6 +246,20 @@ struct __bounding_box {
         });
 
         return __bounding_box<CoordinateType, rank>(boundaries);
+    }
+
+    inline CoordinateType sdistance(std::array<CoordinateType, rank> point) const {
+        assert(!contains<true>(point));
+
+        CoordinateType distance_squared = 0;
+        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+            CoordinateType gt = point[i] - stops[i];
+            CoordinateType lt = starts[i] - point[i];
+            CoordinateType d = std::max(gt, lt);
+            distance_squared += d * d;
+        });
+
+        return distance_squared;
     }
 };
 

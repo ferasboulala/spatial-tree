@@ -3,7 +3,8 @@ cmake_minimum_required(VERSION 3.0)
 project(spatial-tree)
 
 # Do not use -ffast-math because it will break floating point correctness. Use it only if coordinate types are integers.
-add_compile_options(-O3 -march=native -Wall -Wextra -fverbose-asm -save-temps)
+# -DNDEBUG is not always set. Explicitly set it.
+add_compile_options(-O3 -march=native -Wall -Wextra -fverbose-asm -save-temps -DNDEBUG)
   set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -194,6 +194,23 @@ TEST(TestBoundingBox, Recurse) {
     typed_test.operator()<int>();
 }
 
+TEST(TestBoundingBox, SDistance) {
+    const auto typed_test = [&]<typename CoordT>() {
+        const st::__bounding_box<CoordT, 2> bbox({0, 0, 10, 10});
+        ASSERT_EQ(bbox.sdistance({0, 0}), 0);
+        ASSERT_EQ(bbox.sdistance({-2, 0}), 4);
+        ASSERT_EQ(bbox.sdistance({0, -2}), 4);
+        ASSERT_EQ(bbox.sdistance({2, 0}), 4);
+        ASSERT_EQ(bbox.sdistance({0, 2}), 4);
+        ASSERT_EQ(bbox.sdistance({13, 14}), 25);
+        ASSERT_EQ(bbox.sdistance({13, 14}), 25);
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
+}
+
 TEST(TestEuclide, TestEuclideanDistanceDouble) {
     using namespace st::internal;
     ASSERT_DOUBLE_EQ(euclidean_distance_squared<double>(0.0, 0.0), 0.0);
