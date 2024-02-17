@@ -13,4 +13,7 @@ See `example.cpp` and `interactive.cpp`.
 
 ## TODO
 - [ ] ND rank (currently 2D only).
+- [ ] More optimization low hanging fruits.
+- [ ] Add `modify` for moving points which is faster than `emplace` followed by `erase`.
 - [ ] Documentation.
+- [ ] Share benchmarks.
