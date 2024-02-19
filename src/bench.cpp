@@ -51,6 +51,7 @@ void benchmark_insertions(benchmark::State &state, TreeType &tree) {
 
     uint64_t n_points_inserted = 0;
     uint64_t n_collisions = 0;
+    tree.reserve(test_size);
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
@@ -75,6 +76,7 @@ void benchmark_deletions(benchmark::State &state, TreeType &tree) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(BEG, END, test_size);
 
+    tree.reserve(test_size);
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
@@ -111,6 +113,7 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(BEG, END, test_size);
 
+    tree.reserve(test_size);
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
@@ -151,6 +154,7 @@ void benchmark_find_single(benchmark::State &state, TreeType &tree) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(BEG, END, test_size);
 
+    tree.reserve(test_size);
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
@@ -179,6 +183,7 @@ void benchmark_nearest(benchmark::State &state, TreeType &tree) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(BEG, END, test_size);
 
+    tree.reserve(test_size);
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
@@ -217,6 +222,15 @@ private:
         std::unordered_map<std::pair<CoordinateType, CoordinateType>, StorageType, HashFunc>;
 
 public:
+    inline void reserve(uint64_t capacity) {
+        table_.reserve(capacity);
+    }
+    inline uint64_t capacity() const {
+        return table_.capacity();
+    }
+    inline uint64_t size() const {
+        return table_.size();
+    }
     inline void clear() { table_.clear(); }
 
     template <typename... Args>

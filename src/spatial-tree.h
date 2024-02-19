@@ -207,7 +207,7 @@ struct __bounding_box {
         assert(contains(point));
 
         const auto                           origins = origin();
-        uint64_t                             quadrant = 0;
+        uint64_t                             quad = 0;
         std::array<CoordinateType, rank * 2> boundaries;
         internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
             CoordinateType span = stops[i] - starts[i];
@@ -218,14 +218,14 @@ struct __bounding_box {
             if (gt) {
                 boundaries[i] = starts[i] + new_span;
                 boundaries[i + rank] = stops[i];
-                quadrant |= (1 << i);
+                quad |= (1 << i);
             } else {
                 boundaries[i] = starts[i];
                 boundaries[i + rank] = stops[i] - (new_span + remainder);
             }
         });
 
-        return {__bounding_box<CoordinateType, rank>(boundaries), quadrant};
+        return {__bounding_box<CoordinateType, rank>(boundaries), quad};
     }
 
     inline __bounding_box<CoordinateType, rank> qrecurse(uint64_t quad) const {
@@ -389,8 +389,8 @@ private:
                                                 tree_node_with_storage>::type {};
 
     struct tree_node_leaf {
-        std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
         uint8_t                                          size;
+        std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
 
         tree_node_leaf(const tree_node_leaf &other) {
             for (uint64_t i = 0; i < size; ++i) {
@@ -424,11 +424,12 @@ private:
 
     struct tree_node {
         static constexpr uint64_t NO_INDEX = std::numeric_limits<uint64_t>::max();
+
+        bool is_branch;
         union {
             tree_node_leaf   leaf;
             tree_node_branch branch;
         };
-        bool is_branch;
 
         inline tree_node() { reset(); }
         inline tree_node(tree_node &&other) : is_branch(other.is_branch) {
@@ -522,6 +523,8 @@ public:
 
     ~spatial_tree() = default;
 
+    inline void     reserve(uint64_t capacity) { nodes_.reserve(4 * capacity / MAXIMUM_NODE_SIZE); }
+    inline uint64_t capacity() const { return nodes_.capacity() / 4 * MAXIMUM_NODE_SIZE; }
     inline uint64_t size() const {
         assert(nodes_.size());
         const auto &root = nodes_.front();
@@ -529,6 +532,9 @@ public:
             return root.leaf.size;
         }
         return root.branch.size;
+    }
+    inline uint64_t bsize() const {
+        return sizeof(boundaries_) + sizeof(tree_node) * (nodes_.size() + freed_nodes_.size());
     }
     inline bool empty() const { return size() == 0; }
     inline void clear() {
@@ -695,8 +701,8 @@ private:
                                                 tree_node_with_storage>::type {};
 
     struct tree_node_leaf {
-        std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
         uint8_t                                          size;
+        std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
 
         tree_node_leaf(const tree_node_leaf &other) {
             for (uint64_t i = 0; i < size; ++i) {
@@ -730,11 +736,12 @@ private:
 
     struct tree_node {
         static constexpr uint64_t NO_INDEX = std::numeric_limits<uint64_t>::max();
+
+        bool is_branch;
         union {
             tree_node_leaf   leaf;
             tree_node_branch branch;
         };
-        bool is_branch;
 
         inline tree_node() { reset(); }
         inline tree_node(tree_node &&other) : is_branch(other.is_branch) {
