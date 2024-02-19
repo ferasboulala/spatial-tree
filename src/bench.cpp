@@ -55,7 +55,7 @@ void benchmark_insertions(benchmark::State &state, TreeType &tree) {
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            bool inserted = tree.emplace(x, y).second;
+            bool inserted = tree.emplace({x, y}).second;
             n_points_inserted += inserted;
             n_collisions += (1 - inserted);
         }
@@ -222,16 +222,10 @@ private:
         std::unordered_map<std::pair<CoordinateType, CoordinateType>, StorageType, HashFunc>;
 
 public:
-    inline void reserve(uint64_t capacity) {
-        table_.reserve(capacity);
-    }
-    inline uint64_t capacity() const {
-        return table_.capacity();
-    }
-    inline uint64_t size() const {
-        return table_.size();
-    }
-    inline void clear() { table_.clear(); }
+    inline void     reserve(uint64_t capacity) { table_.reserve(capacity); }
+    inline uint64_t capacity() const { return table_.capacity(); }
+    inline uint64_t size() const { return table_.size(); }
+    inline void     clear() { table_.clear(); }
 
     template <typename... Args>
     inline auto emplace(CoordinateType x, CoordinateType y, Args &&...args) {
@@ -313,7 +307,8 @@ void insertions(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
 
-    auto tree = st::internal::spatial_tree<VALUE_TYPE, CoordT, MAX_NODE_SIZE>({BEG, END, END, BEG});
+    auto tree = st::internal::__spatial_tree<VALUE_TYPE, CoordT, 2, MAX_NODE_SIZE>(
+        st::__bounding_box<CoordT, 2>({BEG, BEG, END, END}));
     benchmark_insertions<CoordT>(state, tree);
 }
 
@@ -361,7 +356,7 @@ BENCHMARK(find<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(find_single<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(nearest<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 
-BENCHMARK(hash_table_oracle<int, COORD_TYPE>::insertions)->RangeMultiplier(2)->Range(LOW, HIGH);
+// BENCHMARK(hash_table_oracle<int, COORD_TYPE>::insertions)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::deletions)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find_single)->RangeMultiplier(2)->Range(LOW, HIGH);

@@ -158,8 +158,7 @@ struct __bounding_box {
     }
 
     inline bool operator==(const __bounding_box<CoordinateType, rank> &other) const {
-        return !std::memcmp(starts.begin(), other.starts.begin(), sizeof(starts)) &&
-               !std::memcmp(stops.begin(), other.stops.begin(), sizeof(stops));
+        return !std::memcmp(this, &other, sizeof(other));
     }
 
     inline CoordinateType area() const {
@@ -295,6 +294,8 @@ public:
 
     ~__spatial_tree() = default;
 
+    inline void     reserve(uint64_t capacity) { nodes_.reserve(4 * capacity / MAXIMUM_NODE_SIZE); }
+    inline uint64_t capacity() const { return nodes_.capacity() / 4 * MAXIMUM_NODE_SIZE; }
     inline uint64_t size() const {
         assert(nodes_.size());
         const auto &root = nodes_.front();
