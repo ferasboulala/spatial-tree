@@ -20,7 +20,7 @@ struct opaque_data {
     char opaque[1];
     opaque_data() {}
 };
-static constexpr uint64_t MAX_NODE_SIZE = 32;
+static constexpr uint64_t MAX_NODE_SIZE = 96;
 
 template <typename CoordT>
 std::vector<std::pair<CoordT, CoordT>> generate_points(CoordT BEG, CoordT END, uint64_t test_size) {
@@ -80,7 +80,7 @@ void benchmark_deletions(benchmark::State &state, TreeType &tree) {
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            tree.emplace(x, y);
+            tree.emplace({x, y});
         }
     }
 
@@ -90,8 +90,8 @@ void benchmark_deletions(benchmark::State &state, TreeType &tree) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
             auto [x_, y_] = other_points[i];
-            tree.erase(x, y);
-            tree.erase(x_, y_);
+            tree.erase({x, y});
+            tree.erase({x_, y_});
         }
     }
     state.SetItemsProcessed(test_size * 2 * state.iterations());
@@ -317,7 +317,8 @@ void deletions(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
 
-    auto tree = st::internal::spatial_tree<VALUE_TYPE, CoordT, MAX_NODE_SIZE>({BEG, END, END, BEG});
+    auto tree = st::internal::__spatial_tree<VALUE_TYPE, CoordT, 2, MAX_NODE_SIZE>(
+        st::__bounding_box<CoordT, 2>({BEG, BEG, END, END}));
     benchmark_deletions<CoordT>(state, tree);
 }
 
@@ -357,7 +358,7 @@ BENCHMARK(find_single<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(nearest<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 
 // BENCHMARK(hash_table_oracle<int, COORD_TYPE>::insertions)->RangeMultiplier(2)->Range(LOW, HIGH);
-BENCHMARK(hash_table_oracle<int, COORD_TYPE>::deletions)->RangeMultiplier(2)->Range(LOW, HIGH);
+// BENCHMARK(hash_table_oracle<int, COORD_TYPE>::deletions)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find_single)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::nearest)->RangeMultiplier(2)->Range(LOW, HIGH);

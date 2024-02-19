@@ -423,6 +423,10 @@ public:
         return emplace_recursively(0, boundary_, point, std::forward<Args>(args)...);
     }
 
+    inline bool erase(std::array<CoordinateType, rank> point) {
+        return erase_recursively(0, boundary_, size(), point);
+    }
+
 private:
     using cartesian_quadrant = int;
 
@@ -600,6 +604,84 @@ private:
         assert(ret.second);
 
         return ret;
+    }
+
+    inline void recursively_gather_points(uint64_t node_index, tree_node_leaf &leaf) {
+        assert(node_index < nodes_.size());
+
+        tree_node &node = nodes_[node_index];
+        if (node.is_a_leaf()) {
+            for (uint8_t i = 0; i < node.leaf.size; ++i) {
+                leaf.items[leaf.size++] = std::move(node.leaf.items[i]);
+            }
+            assert(leaf.size <= MAXIMUM_NODE_SIZE);
+            node.reset();
+            return;
+        }
+
+        // TODO: Specify that it is safe to access &node because there was no realloc.
+        // TODO: Do it elsewhere too.
+        for (uint64_t quad = 0; quad < 4; ++quad) {
+            recursively_gather_points(node.branch.index_of_first_child + quad, leaf);
+        }
+
+        freed_nodes_.push_back(node.branch.index_of_first_child);
+        node.reset();
+    }
+
+    inline bool erase_recursively(uint64_t                              node_index,
+                                  const __bounding_box<CoordinateType> &boundary,
+                                  uint64_t                              parent_size_after_removal,
+                                  std::array<CoordinateType, rank>      point) {
+        assert(node_index < nodes_.size());
+
+        tree_node &node = nodes_[node_index];
+        if (node.is_a_leaf()) {
+            for (uint8_t i = 0; i < node.leaf.size; ++i) {
+                if (internal::equal<CoordinateType, rank>(point, node.leaf.items[i].coordinates)) {
+                    uint64_t last_index = node.leaf.size - 1;
+                    if (last_index != i) {
+                        node.leaf.items[i] = std::move(node.leaf.items[last_index]);
+                    }
+                    --node.leaf.size;
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        uint64_t size_after_removal = node.branch.size - 1;
+        const auto [new_boundary, selected_quad] = boundary.recurse(point);
+        const bool erased = erase_recursively(node.branch.index_of_first_child + selected_quad,
+                                              new_boundary,
+                                              size_after_removal,
+                                              point);
+
+        if (!erased) {
+            return false;
+        }
+
+        if (parent_size_after_removal <= MAXIMUM_NODE_SIZE) {
+            return true;
+        }
+
+        if (--node.branch.size > MAXIMUM_NODE_SIZE) {
+            return true;
+        }
+
+        // TODO: Specify that it is safe to access &node because there was no realloc.
+        /// EXPLANATION: Not doing it at the root because of the union.
+        uint64_t index_of_first_child = node.branch.index_of_first_child;
+        node.reset();
+        for (uint64_t quad = 0; quad < std::pow(2, rank); ++quad) {
+            recursively_gather_points(index_of_first_child + quad, node.leaf);
+        }
+        freed_nodes_.push_back(index_of_first_child);
+        assert(node.leaf.size <= MAXIMUM_NODE_SIZE);
+
+        return true;
     }
 
     const __bounding_box<CoordinateType, rank> boundary_;

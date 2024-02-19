@@ -289,25 +289,26 @@ TEST(TestSpatialTree, UniqueInsertions) {
                 ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
                 tree.clear();
             };
-            CoordT                         bound = test_size;
+            CoordT                              bound = test_size;
             const st::__bounding_box<CoordT, 2> bounds({-bound, -bound, bound, bound});
 
-            st::internal::__spatial_tree<int, CoordT> bounded(bounds);
-            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT>>(bounded);
+            st::internal::__spatial_tree<int, CoordT, 2> bounded(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2>>(bounded);
 
-            st::internal::__spatial_tree<int, CoordT> unbounded;
-            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT>>(unbounded);
+            st::internal::__spatial_tree<int, CoordT, 2> unbounded;
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2>>(unbounded);
 
             st::internal::__spatial_tree<int, CoordT, 2, 1> small_size(bounds);
-            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 1>>(
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 1>>(
                 small_size);
 
             st::internal::__spatial_tree<int, CoordT, 2, 16> large_size(bounds);
-            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 16>>(
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 16>>(
                 large_size);
 
             st::internal::__spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
-            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 7>>(odd_size);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 7>>(
+                odd_size);
         }
     };
     typed_test.operator()<float>();
@@ -322,56 +323,59 @@ TEST(TestSpatialTree, UniqueDeletions) {
             const auto inner_test = [&]<typename TreeType>(auto &tree) {
                 for (uint64_t i = 1; i <= test_size; ++i) {
                     CoordT coord = i;
-                    ASSERT_TRUE(tree.emplace(coord, coord, i).second);
-                    ASSERT_TRUE(tree.emplace(coord, -coord, i).second);
-                    ASSERT_TRUE(tree.emplace(-coord, coord, i).second);
-                    ASSERT_TRUE(tree.emplace(-coord, -coord, i).second);
+                    ASSERT_TRUE(tree.emplace({coord, coord}, i).second);
+                    ASSERT_TRUE(tree.emplace({coord, -coord}, i).second);
+                    ASSERT_TRUE(tree.emplace({-coord, coord}, i).second);
+                    ASSERT_TRUE(tree.emplace({-coord, -coord}, i).second);
                 }
                 ASSERT_TRUE(!tree.empty());
                 for (uint64_t i = 1; i <= test_size; ++i) {
                     CoordT coord = i;
-                    ASSERT_TRUE(tree.erase(coord, coord));
-                    ASSERT_TRUE(tree.erase(coord, -coord));
-                    ASSERT_TRUE(tree.erase(-coord, coord));
-                    ASSERT_TRUE(tree.erase(-coord, -coord));
+                    ASSERT_TRUE(tree.erase({coord, coord}));
+                    ASSERT_TRUE(tree.erase({coord, -coord}));
+                    ASSERT_TRUE(tree.erase({-coord, coord}));
+                    ASSERT_TRUE(tree.erase({-coord, -coord}));
                 }
                 ASSERT_TRUE(tree.empty());
                 ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
                 for (uint64_t i = 1; i <= test_size; ++i) {
                     CoordT coord = i;
-                    ASSERT_TRUE(tree.emplace(coord, coord, i).second);
-                    ASSERT_TRUE(tree.emplace(coord, -coord, i).second);
-                    ASSERT_TRUE(tree.emplace(-coord, coord, i).second);
-                    ASSERT_TRUE(tree.emplace(-coord, -coord, i).second);
+                    ASSERT_TRUE(tree.emplace({coord, coord}, i).second);
+                    ASSERT_TRUE(tree.emplace({coord, -coord}, i).second);
+                    ASSERT_TRUE(tree.emplace({-coord, coord}, i).second);
+                    ASSERT_TRUE(tree.emplace({-coord, -coord}, i).second);
                 }
                 ASSERT_TRUE(!tree.empty());
                 for (uint64_t i = 1; i <= test_size; ++i) {
                     CoordT coord = i;
-                    ASSERT_TRUE(tree.erase(coord, coord));
-                    ASSERT_TRUE(tree.erase(coord, -coord));
-                    ASSERT_TRUE(tree.erase(-coord, coord));
-                    ASSERT_TRUE(tree.erase(-coord, -coord));
+                    ASSERT_TRUE(tree.erase({coord, coord}));
+                    ASSERT_TRUE(tree.erase({coord, -coord}));
+                    ASSERT_TRUE(tree.erase({-coord, coord}));
+                    ASSERT_TRUE(tree.erase({-coord, -coord}));
                 }
                 ASSERT_TRUE(tree.empty());
                 ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
             };
-            CoordT                         bound = test_size;
-            const st::bounding_box<CoordT> bounds({-bound, bound, bound, -bound});
+            CoordT                           bound = test_size;
+            const st::__bounding_box<CoordT> bounds({-bound, -bound, bound, bound});
 
-            st::internal::spatial_tree<int, CoordT> bounded(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
+            st::internal::__spatial_tree<int, CoordT, 2> bounded(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2>>(bounded);
 
-            st::internal::spatial_tree<int, CoordT> unbounded;
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
+            st::internal::__spatial_tree<int, CoordT, 2> unbounded;
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2>>(unbounded);
 
-            st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
+            st::internal::__spatial_tree<int, CoordT, 2, 1> small_size(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 1>>(
+                small_size);
 
-            st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
+            st::internal::__spatial_tree<int, CoordT, 2, 16> large_size(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 16>>(
+                large_size);
 
-            st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
+            st::internal::__spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 7>>(
+                odd_size);
         }
     };
     typed_test.operator()<float>();
@@ -394,9 +398,10 @@ TEST(TestSpatialTree, RandomInsertionsAndDeletions) {
             for (uint64_t test_size : test_sizes) {
                 std::unordered_set<int> added_points;
                 for (uint64_t i = 0; i < test_size; ++i) {
-                    const int     x = distribution(device);
-                    const int     y = distribution(device);
-                    const bool    was_inserted_in_tree = tree.emplace(x, y, i).second;
+                    const int  x = distribution(device);
+                    const int  y = distribution(device);
+                    const bool was_inserted_in_tree =
+                        tree.emplace({CoordT(x), CoordT(y)}, i).second;
                     const int64_t unique_hash = x + RANGE_SIZE * y;
                     const bool    was_inserted_in_map = added_points.insert(unique_hash).second;
                     ASSERT_EQ(was_inserted_in_map, was_inserted_in_tree);
@@ -408,7 +413,7 @@ TEST(TestSpatialTree, RandomInsertionsAndDeletions) {
                 for (uint64_t i = 0; i < 100 * test_size; ++i) {
                     const int     x = distribution(device);
                     const int     y = distribution(device);
-                    const bool    was_deleted_from_tree = tree.erase(x, y);
+                    const bool    was_deleted_from_tree = tree.erase({CoordT(x), CoordT(y)});
                     const int64_t unique_hash = x + RANGE_SIZE * y;
                     const bool    was_deleted_from_map = added_points.erase(unique_hash);
                     ASSERT_EQ(was_deleted_from_map, was_deleted_from_tree);
@@ -417,20 +422,21 @@ TEST(TestSpatialTree, RandomInsertionsAndDeletions) {
                 tree.clear();
             }
         };
-        const st::bounding_box<CoordT> bounds(
-            {DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END, DISTRIBUTION_BEG});
+        const st::__bounding_box<CoordT> bounds(
+            {DISTRIBUTION_BEG, DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END});
 
-        st::internal::spatial_tree<int, CoordT> bounded(bounds);
-        inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
+        st::internal::__spatial_tree<int, CoordT, 2> bounded(bounds);
+        inner_test.template operator()<st::internal::__spatial_tree<int, CoordT>>(bounded);
 
-        st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
-        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
+        st::internal::__spatial_tree<int, CoordT, 2, 1> small_size(bounds);
+        inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 1>>(small_size);
 
-        st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
-        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
+        st::internal::__spatial_tree<int, CoordT, 2, 16> large_size(bounds);
+        inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 16>>(
+            large_size);
 
-        st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
-        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
+        st::internal::__spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
+        inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 7>>(odd_size);
     };
 
     typed_test.operator()<float>();
@@ -446,28 +452,31 @@ TEST(TestSpatialTree, IteratorCoverage) {
                 ASSERT_FALSE(std::distance(tree.begin(), tree.end()));
 
                 for (int i = 0; i < test_size; ++i) {
-                    ASSERT_TRUE(tree.emplace(i, i, i).second);
+                    ASSERT_TRUE(tree.emplace({CoordT(i), CoordT(i)}, i).second);
                 }
                 ASSERT_EQ(tree.size(), test_size);
                 ASSERT_EQ(std::distance(tree.begin(), tree.end()), test_size);
             };
-            CoordT                         boundary = test_size;
-            const st::bounding_box<CoordT> bounds({-boundary, boundary, boundary, -boundary});
+            CoordT                           boundary = test_size;
+            const st::__bounding_box<CoordT> bounds({-boundary, -boundary, boundary, boundary});
 
-            st::internal::spatial_tree<int, CoordT> bounded(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
+            st::internal::__spatial_tree<int, CoordT, 2> bounded(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2>>(bounded);
 
-            st::internal::spatial_tree<int, CoordT> unbounded;
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
+            st::internal::__spatial_tree<int, CoordT, 2> unbounded;
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2>>(unbounded);
 
-            st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
+            st::internal::__spatial_tree<int, CoordT, 2, 1> small_size(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 1>>(
+                small_size);
 
-            st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
+            st::internal::__spatial_tree<int, CoordT, 2, 16> large_size(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 16>>(
+                large_size);
 
-            st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
+            st::internal::__spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 2, 7>>(
+                odd_size);
         }
     };
 
