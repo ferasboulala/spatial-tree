@@ -47,6 +47,19 @@ inline void unroll_for(InductionVarType start, InductionVarType stop, const Func
     }
 }
 
+template <typename CoordinateType, uint64_t rank>
+inline bool equal(std::array<CoordinateType, rank> lhs, std::array<CoordinateType, rank> rhs) {
+    bool same = true;
+    unroll_for<rank>(uint64_t(0), rank, [&](auto i) { same &= (lhs[i] == rhs[i]); });
+
+    return same;
+}
+
+template <typename CoordinateType, uint64_t rank>
+inline void set(std::array<CoordinateType, rank> &dst, std::array<CoordinateType, rank> src) {
+    unroll_for<rank>(uint64_t(0), rank, [&](auto i) { dst[i] = src[i]; });
+}
+
 template <typename AbsDiff, typename T, typename... Args>
 static inline T euclidean_distance_squared_impl(AbsDiff) {
     return T(0);
@@ -134,13 +147,13 @@ struct __bounding_box {
         stops.fill(std::numeric_limits<CoordinateType>::max() / 2);
     }
 
-    inline __bounding_box(std::array<CoordinateType, rank * 2> boundaries) {
+    inline __bounding_box(std::array<CoordinateType, rank * 2> boundary) {
         internal::unroll_for<rank>(uint64_t(0), rank, [&](uint64_t i) {
-            assert(boundaries[i] >= std::numeric_limits<CoordinateType>::lowest() / 2);
-            assert(boundaries[i + rank] <= std::numeric_limits<CoordinateType>::max() / 2);
+            assert(boundary[i] >= std::numeric_limits<CoordinateType>::lowest() / 2);
+            assert(boundary[i + rank] <= std::numeric_limits<CoordinateType>::max() / 2);
 
-            starts[i] = boundaries[i];
-            stops[i] = boundaries[i + rank];
+            starts[i] = boundary[i];
+            stops[i] = boundary[i + rank];
         });
     }
 
@@ -208,7 +221,7 @@ struct __bounding_box {
 
         const auto                           origins = origin();
         uint64_t                             quad = 0;
-        std::array<CoordinateType, rank * 2> boundaries;
+        std::array<CoordinateType, rank * 2> boundary;
         internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
             CoordinateType span = stops[i] - starts[i];
             CoordinateType new_span = span / 2;
@@ -216,36 +229,36 @@ struct __bounding_box {
 
             bool gt = point[i] > origins[i];
             if (gt) {
-                boundaries[i] = starts[i] + new_span;
-                boundaries[i + rank] = stops[i];
+                boundary[i] = starts[i] + new_span;
+                boundary[i + rank] = stops[i];
                 quad |= (1 << i);
             } else {
-                boundaries[i] = starts[i];
-                boundaries[i + rank] = stops[i] - (new_span + remainder);
+                boundary[i] = starts[i];
+                boundary[i + rank] = stops[i] - (new_span + remainder);
             }
         });
 
-        return {__bounding_box<CoordinateType, rank>(boundaries), quad};
+        return {__bounding_box<CoordinateType, rank>(boundary), quad};
     }
 
     inline __bounding_box<CoordinateType, rank> qrecurse(uint64_t quad) const {
         assert(quad < std::pow(2, rank));
-        std::array<CoordinateType, rank * 2> boundaries;
+        std::array<CoordinateType, rank * 2> boundary;
         internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
             CoordinateType span = stops[i] - starts[i];
             CoordinateType new_span = span / 2;
             CoordinateType remainder = span - 2 * new_span;
 
             if (quad & (1 << i)) {
-                boundaries[i] = starts[i] + new_span;
-                boundaries[i + rank] = stops[i];
+                boundary[i] = starts[i] + new_span;
+                boundary[i + rank] = stops[i];
             } else {
-                boundaries[i] = starts[i];
-                boundaries[i + rank] = stops[i] - (new_span + remainder);
+                boundary[i] = starts[i];
+                boundary[i + rank] = stops[i] - (new_span + remainder);
             }
         });
 
-        return __bounding_box<CoordinateType, rank>(boundaries);
+        return __bounding_box<CoordinateType, rank>(boundary);
     }
 
     inline CoordinateType sdistance(std::array<CoordinateType, rank> point) const {
@@ -276,15 +289,13 @@ public:
     static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
 
     __spatial_tree() { clear(); }
-    __spatial_tree(const __bounding_box<CoordinateType, rank> &boundaries)
-        : boundaries_(boundaries) {
+    __spatial_tree(const __bounding_box<CoordinateType, rank> &boundary) : boundary_(boundary) {
         clear();
     }
 
     ~__spatial_tree() = default;
 
     inline uint64_t size() const {
-        return 0;
         assert(nodes_.size());
         const auto &root = nodes_.front();
         if (root.is_a_leaf()) {
@@ -299,6 +310,28 @@ public:
         freed_nodes_.clear();
     }
 
+    template <typename Func>
+    void walk(Func func) const {
+        const std::function<void(uint64_t, const __bounding_box<CoordinateType> &)>
+            walk_recursively = [&](auto node_index, auto boundary) {
+                assert(node_index < nodes_.size());
+                const tree_node &node = nodes_[node_index];
+                func(boundary, node.is_a_leaf());
+
+                if (node.is_a_leaf()) {
+                    return;
+                }
+
+                for (uint64_t child = 0; child < std::pow(2, rank); ++child) {
+                    const uint64_t child_index = node.branch.index_of_first_child + child;
+                    const auto     new_boundary = compute_new_boundary(child, boundary);
+                    walk_recursively(child_index, new_boundary);
+                }
+            };
+
+        walk_recursively(0, boundary_);
+    }
+
     struct iterator {
     public:
         using iterator_category = std::forward_iterator_tag;
@@ -307,11 +340,13 @@ public:
         using pointer = value_type *;
         using reference = value_type &;
 
-        inline iterator(const __spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree,
-                        uint64_t node_index,
-                        uint8_t  item_index)
+        inline iterator(
+            const __spatial_tree<StorageType, CoordinateType, rank, MAXIMUM_NODE_SIZE> *tree,
+            uint64_t                                                                    node_index,
+            uint8_t                                                                     item_index)
             : tree_(tree), node_index_(node_index), item_index_(item_index) {}
-        inline iterator(const __spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree)
+        inline iterator(
+            const __spatial_tree<StorageType, CoordinateType, rank, MAXIMUM_NODE_SIZE> *tree)
             : tree_(tree) {
             end();
         }
@@ -360,11 +395,32 @@ public:
             item_index_ = 0;
         }
 
-        const __spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> *tree_;
+        const __spatial_tree<StorageType, CoordinateType, rank, MAXIMUM_NODE_SIZE> *tree_;
 
         uint64_t node_index_;
         uint8_t  item_index_;
     };
+
+    inline iterator end() const { return iterator(this); }
+    inline iterator begin() const {
+        if (empty()) {
+            return end();
+        }
+
+        iterator         ret(this, 0, 0);
+        const tree_node &first_node = nodes_.front();
+        if (first_node.is_a_leaf() && first_node.leaf.size) return ret;
+
+        return ++ret;
+    }
+
+    template <typename... Args>
+    inline std::pair<iterator, bool> emplace(std::array<CoordinateType, rank> point,
+                                             Args &&...args) {
+        assert(boundary_.contains(point));
+
+        return emplace_recursively(0, boundary_, point, std::forward<Args>(args)...);
+    }
 
 private:
     using cartesian_quadrant = int;
@@ -452,7 +508,100 @@ private:
         }
     };
 
-    const __bounding_box<CoordinateType, rank> boundaries_;
+    template <typename... Args>
+    inline std::pair<iterator, bool> emplace_recursively_helper(
+        uint64_t                              index_of_first_child,
+        const __bounding_box<CoordinateType> &boundary,
+        std::array<CoordinateType, rank>      point,
+        Args &&...args) {
+        const auto [new_boundary, selected_quad] = boundary.recurse(point);
+
+        return emplace_recursively(
+            index_of_first_child + selected_quad, new_boundary, point, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    std::pair<iterator, bool> emplace_recursively(uint64_t                              node_index,
+                                                  const __bounding_box<CoordinateType> &boundary,
+                                                  std::array<CoordinateType, rank>      point,
+                                                  Args &&...args) {
+        assert(node_index < nodes_.size());
+        assert(boundary.contains(point));
+
+        tree_node &node = nodes_[node_index];
+        if (node.is_a_branch()) {
+            const auto ret = emplace_recursively_helper(
+                node.branch.index_of_first_child, boundary, point, std::forward<Args>(args)...);
+            nodes_[node_index].branch.size += ret.second;
+
+            return ret;
+        }
+
+        // SIMD this shit.
+        uint64_t item_index = 0;
+        __unroll_4 for (uint64_t i = 0; i < node.leaf.size; ++i) {
+            const bool same =
+                internal::equal<CoordinateType, rank>(point, node.leaf.items[i].coordinates);
+            item_index += (i + 1) * same;
+        }
+
+        if (item_index) {
+            return {iterator(this, node_index, item_index - 1), false};
+        }
+
+        const bool node_is_full = node.leaf.size == MAXIMUM_NODE_SIZE;
+        if (!node_is_full) {
+            internal::set<CoordinateType, rank>(node.leaf.items[node.leaf.size].coordinates, point);
+            if constexpr (!std::is_void_v<StorageType>) {
+#if defined(__gnu_compiler)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+                node.leaf.items[node.leaf.size].storage =
+                    std::move(StorageType(std::forward<Args>(args)...));
+#if defined(__gnu_compiler)
+#pragma GCC diagnostic pop
+#endif
+            }
+            ++node.leaf.size;
+            return {iterator(this, node_index, node.leaf.size - 1), true};
+        }
+
+        uint64_t new_index_of_first_child;
+        if (freed_nodes_.size()) {
+            new_index_of_first_child = freed_nodes_.back();
+            freed_nodes_.pop_back();
+        } else {
+            new_index_of_first_child = nodes_.size();
+            nodes_.resize(nodes_.size() + std::pow(2, rank));
+        }
+
+        // nodes_.resize may have reallocated.
+        tree_node &node_as_branch = nodes_[node_index];
+        internal::unroll_for<MAXIMUM_NODE_SIZE>(uint8_t(0), MAXIMUM_NODE_SIZE, [&](auto i) {
+            if constexpr (std::is_void_v<StorageType>) {
+                emplace_recursively_helper(
+                    new_index_of_first_child, boundary, node_as_branch.leaf.items[i].coordinates);
+            } else {
+                emplace_recursively_helper(new_index_of_first_child,
+                                           boundary,
+                                           node_as_branch.leaf.items[i].coordinates,
+                                           node_as_branch.leaf.items[i].storage);
+            }
+        });
+
+        node_as_branch.is_branch = true;
+        node_as_branch.branch.index_of_first_child = new_index_of_first_child;
+        node_as_branch.branch.size = MAXIMUM_NODE_SIZE + 1;
+
+        const auto ret = emplace_recursively_helper(
+            new_index_of_first_child, boundary, point, std::forward<Args>(args)...);
+        assert(ret.second);
+
+        return ret;
+    }
+
+    const __bounding_box<CoordinateType, rank> boundary_;
     std::vector<tree_node>                     nodes_;
     std::vector<uint64_t>                      freed_nodes_;
 };
@@ -507,17 +656,17 @@ public:
 
     spatial_tree()
         // Dividing by 2 to be able to do (upper bound +/- lower bound) without overflowing.
-        : boundaries_(std::numeric_limits<CoordinateType>::lowest() / 2,
-                      std::numeric_limits<CoordinateType>::max() / 2,
-                      std::numeric_limits<CoordinateType>::max() / 2,
-                      std::numeric_limits<CoordinateType>::lowest() / 2) {
+        : boundary_(std::numeric_limits<CoordinateType>::lowest() / 2,
+                    std::numeric_limits<CoordinateType>::max() / 2,
+                    std::numeric_limits<CoordinateType>::max() / 2,
+                    std::numeric_limits<CoordinateType>::lowest() / 2) {
         clear();
     }
-    spatial_tree(const bounding_box<CoordinateType> &boundaries) : boundaries_(boundaries) {
-        assert(boundaries_.top_x >= std::numeric_limits<CoordinateType>::lowest() / 2);
-        assert(boundaries_.top_y <= std::numeric_limits<CoordinateType>::max() / 2);
-        assert(boundaries_.bottom_x <= std::numeric_limits<CoordinateType>::max() / 2);
-        assert(boundaries_.bottom_y >= std::numeric_limits<CoordinateType>::lowest() / 2);
+    spatial_tree(const bounding_box<CoordinateType> &boundary) : boundary_(boundary) {
+        assert(boundary_.top_x >= std::numeric_limits<CoordinateType>::lowest() / 2);
+        assert(boundary_.top_y <= std::numeric_limits<CoordinateType>::max() / 2);
+        assert(boundary_.bottom_x <= std::numeric_limits<CoordinateType>::max() / 2);
+        assert(boundary_.bottom_y >= std::numeric_limits<CoordinateType>::lowest() / 2);
         clear();
     }
 
@@ -534,7 +683,7 @@ public:
         return root.branch.size;
     }
     inline uint64_t bsize() const {
-        return sizeof(boundaries_) + sizeof(tree_node) * (nodes_.size() + freed_nodes_.size());
+        return sizeof(boundary_) + sizeof(tree_node) * (nodes_.size() + freed_nodes_.size());
     }
     inline bool empty() const { return size() == 0; }
     inline void clear() {
@@ -546,10 +695,10 @@ public:
     template <typename Func>
     void walk(Func func) const {
         const std::function<void(uint64_t, const bounding_box<CoordinateType> &)> walk_recursively =
-            [&](auto node_index, auto boundaries) {
+            [&](auto node_index, auto boundary) {
                 assert(node_index < nodes_.size());
                 const tree_node &node = nodes_[node_index];
-                func(boundaries, node.is_a_leaf());
+                func(boundary, node.is_a_leaf());
 
                 if (node.is_a_leaf()) {
                     return;
@@ -557,12 +706,12 @@ public:
 
                 for (uint64_t quad = 0; quad < 4; ++quad) {
                     const uint64_t child_index = node.branch.index_of_first_child + quad;
-                    const auto     new_boundaries = compute_new_boundaries(quad, boundaries);
-                    walk_recursively(child_index, new_boundaries);
+                    const auto     new_boundary = compute_new_boundary(quad, boundary);
+                    walk_recursively(child_index, new_boundary);
                 }
             };
 
-        walk_recursively(0, boundaries_);
+        walk_recursively(0, boundary_);
     }
 
     struct iterator {
@@ -647,30 +796,30 @@ public:
 
     template <typename... Args>
     inline std::pair<iterator, bool> emplace(CoordinateType x, CoordinateType y, Args &&...args) {
-        assert(is_inside_bounding_box(x, y, boundaries_));
+        assert(is_inside_bounding_box(x, y, boundary_));
 
-        return emplace_recursively(0, boundaries_, x, y, std::forward<Args>(args)...);
+        return emplace_recursively(0, boundary_, x, y, std::forward<Args>(args)...);
     }
 
     inline bool erase(CoordinateType x, CoordinateType y) {
-        return erase_recursively(0, boundaries_, size(), x, y);
+        return erase_recursively(0, boundary_, size(), x, y);
     }
 
     std::vector<iterator> nearest(CoordinateType x, CoordinateType y) const {
         CoordinateType        nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
         std::vector<iterator> results;
-        nearest_recursively(0, boundaries_, x, y, nearest_distance_squared, results);
+        nearest_recursively(0, boundary_, x, y, nearest_distance_squared, results);
 
         return results;
     }
 
     template <typename Func>
     inline void find(const bounding_box<CoordinateType> &bbox, Func func) const {
-        find_recursively(bbox, boundaries_, func, 0);
+        find_recursively(bbox, boundary_, func, 0);
     }
 
     inline iterator find(CoordinateType x, CoordinateType y) const {
-        return find_recursively(x, y, boundaries_, 0);
+        return find_recursively(x, y, boundary_, 0);
     }
 
 private:
@@ -791,12 +940,11 @@ private:
         }
     }
 
-    static inline auto belongs_to_quadrant(const bounding_box<CoordinateType> &boundaries,
+    static inline auto belongs_to_quadrant(const bounding_box<CoordinateType> &boundary,
                                            CoordinateType                      x,
                                            CoordinateType                      y) {
-        CoordinateType origin_x = (boundaries.bottom_x - boundaries.top_x) / 2 + boundaries.top_x;
-        CoordinateType origin_y =
-            (boundaries.top_y - boundaries.bottom_y) / 2 + boundaries.bottom_y;
+        CoordinateType origin_x = (boundary.bottom_x - boundary.top_x) / 2 + boundary.top_x;
+        CoordinateType origin_y = (boundary.top_y - boundary.bottom_y) / 2 + boundary.bottom_y;
 
         // Faster than branchless.
         if (x <= origin_x) {
@@ -812,8 +960,8 @@ private:
         }
     }
 
-    static inline bounding_box<CoordinateType> compute_new_boundaries(
-        uint64_t quad, const bounding_box<CoordinateType> &boundaries) {
+    static inline bounding_box<CoordinateType> compute_new_boundary(
+        uint64_t quad, const bounding_box<CoordinateType> &boundary) {
         static std::array<std::tuple<bool, bool>, 4> factors;
         factors[cartesian_quadrant::NE] = std::tuple<bool, bool>{1, 1};
         factors[cartesian_quadrant::NW] = std::tuple<bool, bool>{0, 1};
@@ -821,17 +969,17 @@ private:
         factors[cartesian_quadrant::SE] = std::tuple<bool, bool>{1, 0};
         const auto [fx, fy] = factors[quad];
 
-        CoordinateType width = (boundaries.bottom_x - boundaries.top_x);
-        CoordinateType height = (boundaries.top_y - boundaries.bottom_y);
+        CoordinateType width = (boundary.bottom_x - boundary.top_x);
+        CoordinateType height = (boundary.top_y - boundary.bottom_y);
         CoordinateType new_width = width / 2;
         CoordinateType new_height = height / 2;
         CoordinateType width_remainder = width - 2 * new_width;
         CoordinateType height_remainder = height - 2 * new_height;
 
-        CoordinateType top_x = boundaries.top_x;
-        CoordinateType bottom_x = boundaries.bottom_x;
-        CoordinateType top_y = boundaries.top_y;
-        CoordinateType bottom_y = boundaries.bottom_y;
+        CoordinateType top_x = boundary.top_x;
+        CoordinateType bottom_x = boundary.bottom_x;
+        CoordinateType top_y = boundary.top_y;
+        CoordinateType bottom_y = boundary.bottom_y;
 
         // Faster than branchless.
         if (fx) {
@@ -852,34 +1000,31 @@ private:
     template <typename... Args>
     inline std::pair<iterator, bool> emplace_recursively_helper(
         uint64_t                            index_of_first_child,
-        const bounding_box<CoordinateType> &boundaries,
+        const bounding_box<CoordinateType> &boundary,
         CoordinateType                      x,
         CoordinateType                      y,
         Args &&...args) {
-        const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
-        const auto new_boundaries = compute_new_boundaries(selected_quad, boundaries);
+        const auto selected_quad = belongs_to_quadrant(boundary, x, y);
+        const auto new_boundary = compute_new_boundary(selected_quad, boundary);
 
-        return emplace_recursively(index_of_first_child + selected_quad,
-                                   new_boundaries,
-                                   x,
-                                   y,
-                                   std::forward<Args>(args)...);
+        return emplace_recursively(
+            index_of_first_child + selected_quad, new_boundary, x, y, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
     std::pair<iterator, bool> emplace_recursively(uint64_t                            node_index,
-                                                  const bounding_box<CoordinateType> &boundaries,
+                                                  const bounding_box<CoordinateType> &boundary,
                                                   CoordinateType                      x,
                                                   CoordinateType                      y,
                                                   Args &&...args) {
         assert(node_index < nodes_.size());
-        assert(is_inside_bounding_box(x, y, boundaries));
+        assert(is_inside_bounding_box(x, y, boundary));
 
         tree_node &node = nodes_[node_index];
 
         if (node.is_a_branch()) {
             const auto ret = emplace_recursively_helper(
-                node.branch.index_of_first_child, boundaries, x, y, std::forward<Args>(args)...);
+                node.branch.index_of_first_child, boundary, x, y, std::forward<Args>(args)...);
             nodes_[node_index].branch.size += ret.second;
 
             return ret;
@@ -929,10 +1074,10 @@ private:
             auto x_ = node_as_branch.leaf.items[i].x;
             auto y_ = node_as_branch.leaf.items[i].y;
             if constexpr (std::is_void_v<StorageType>) {
-                emplace_recursively_helper(new_index_of_first_child, boundaries, x_, y_);
+                emplace_recursively_helper(new_index_of_first_child, boundary, x_, y_);
             } else {
                 emplace_recursively_helper(new_index_of_first_child,
-                                           boundaries,
+                                           boundary,
                                            x_,
                                            y_,
                                            node_as_branch.leaf.items[i].storage);
@@ -944,7 +1089,7 @@ private:
         node_as_branch.branch.size = MAXIMUM_NODE_SIZE + 1;
 
         const auto ret = emplace_recursively_helper(
-            new_index_of_first_child, boundaries, x, y, std::forward<Args>(args)...);
+            new_index_of_first_child, boundary, x, y, std::forward<Args>(args)...);
         assert(ret.second);
 
         return ret;
@@ -974,7 +1119,7 @@ private:
     }
 
     inline bool erase_recursively(uint64_t                            node_index,
-                                  const bounding_box<CoordinateType> &boundaries,
+                                  const bounding_box<CoordinateType> &boundary,
                                   uint64_t                            parent_size_after_removal,
                                   CoordinateType                      x,
                                   CoordinateType                      y) {
@@ -998,9 +1143,9 @@ private:
         }
 
         uint64_t   size_after_removal = node.branch.size - 1;
-        const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
+        const auto selected_quad = belongs_to_quadrant(boundary, x, y);
         const bool erased = erase_recursively(node.branch.index_of_first_child + selected_quad,
-                                              compute_new_boundaries(selected_quad, boundaries),
+                                              compute_new_boundary(selected_quad, boundary),
                                               size_after_removal,
                                               x,
                                               y);
@@ -1032,7 +1177,7 @@ private:
 
     inline iterator find_recursively(CoordinateType                      x,
                                      CoordinateType                      y,
-                                     const bounding_box<CoordinateType> &boundaries,
+                                     const bounding_box<CoordinateType> &boundary,
                                      uint64_t                            node_index) const {
         assert(node_index < nodes_.size());
 
@@ -1046,16 +1191,16 @@ private:
             return end();
         }
 
-        const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
+        const auto selected_quad = belongs_to_quadrant(boundary, x, y);
         return find_recursively(x,
                                 y,
-                                compute_new_boundaries(selected_quad, boundaries),
+                                compute_new_boundary(selected_quad, boundary),
                                 node.branch.index_of_first_child + selected_quad);
     }
 
     template <typename Func>
     inline void find_recursively(const bounding_box<CoordinateType> &bbox,
-                                 const bounding_box<CoordinateType> &boundaries,
+                                 const bounding_box<CoordinateType> &boundary,
                                  Func                                func,
                                  uint64_t                            node_index) const {
         assert(node_index < nodes_.size());
@@ -1071,9 +1216,9 @@ private:
         }
 
         __unroll_4 for (uint64_t i = 0; i < 4; ++i) {
-            auto new_boundaries = compute_new_boundaries(i, boundaries);
-            if (bounding_boxes_overlap(bbox, new_boundaries)) {
-                find_recursively(bbox, new_boundaries, func, node.branch.index_of_first_child + i);
+            auto new_boundary = compute_new_boundary(i, boundary);
+            if (bounding_boxes_overlap(bbox, new_boundary)) {
+                find_recursively(bbox, new_boundary, func, node.branch.index_of_first_child + i);
             }
         }
     }
@@ -1089,7 +1234,7 @@ private:
     }
 
     void nearest_recursively(uint64_t                            node_index,
-                             const bounding_box<CoordinateType> &boundaries,
+                             const bounding_box<CoordinateType> &boundary,
                              CoordinateType                      x,
                              CoordinateType                      y,
                              CoordinateType                     &nearest_distance_squared,
@@ -1113,14 +1258,14 @@ private:
             return;
         }
 
-        std::array<bounding_box<CoordinateType>, 4> new_boundaries;
+        std::array<bounding_box<CoordinateType>, 4> new_boundary;
         __unroll_4 for (uint64_t i = 0; i < 4; ++i) {
-            new_boundaries[i] = compute_new_boundaries(i, boundaries);
+            new_boundary[i] = compute_new_boundary(i, boundary);
         }
 
-        const auto selected_quad = belongs_to_quadrant(boundaries, x, y);
+        const auto selected_quad = belongs_to_quadrant(boundary, x, y);
         nearest_recursively(node.branch.index_of_first_child + selected_quad,
-                            new_boundaries[selected_quad],
+                            new_boundary[selected_quad],
                             x,
                             y,
                             nearest_distance_squared,
@@ -1128,10 +1273,10 @@ private:
 
         __unroll_3 for (uint64_t i = 1; i <= 3; ++i) {
             uint64_t quad = (i + selected_quad) % 4;
-            if (smallest_distance_from_bounding_box(new_boundaries[quad], x, y) <=
+            if (smallest_distance_from_bounding_box(new_boundary[quad], x, y) <=
                 nearest_distance_squared) {
                 nearest_recursively(node.branch.index_of_first_child + quad,
-                                    new_boundaries[quad],
+                                    new_boundary[quad],
                                     x,
                                     y,
                                     nearest_distance_squared,
@@ -1140,7 +1285,7 @@ private:
         }
     }
 
-    const bounding_box<CoordinateType> boundaries_;
+    const bounding_box<CoordinateType> boundary_;
     std::vector<tree_node>             nodes_;
     std::vector<uint64_t>              freed_nodes_;
 };
@@ -1151,16 +1296,16 @@ class spatial_map : public internal::spatial_tree<StorageType, CoordinateType, M
 public:
     static_assert(!std::is_void_v<StorageType>, "For no storage type, use st::spatial_set");
     spatial_map() : internal::spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE>() {}
-    spatial_map(const bounding_box<CoordinateType> &boundaries)
-        : internal::spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE>(boundaries) {}
+    spatial_map(const bounding_box<CoordinateType> &boundary)
+        : internal::spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE>(boundary) {}
 };
 
 template <typename CoordinateType = double, uint8_t MAXIMUM_NODE_SIZE = 32>
 class spatial_set : public internal::spatial_tree<void, CoordinateType, MAXIMUM_NODE_SIZE> {
 public:
     spatial_set() : internal::spatial_tree<void, CoordinateType, MAXIMUM_NODE_SIZE>() {}
-    spatial_set(const bounding_box<CoordinateType> &boundaries)
-        : internal::spatial_tree<void, CoordinateType, MAXIMUM_NODE_SIZE>(boundaries) {}
+    spatial_set(const bounding_box<CoordinateType> &boundary)
+        : internal::spatial_tree<void, CoordinateType, MAXIMUM_NODE_SIZE>(boundary) {}
 };
 
 }  // namespace st

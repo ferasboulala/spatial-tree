@@ -257,10 +257,10 @@ TEST(TestEuclide, TestAbsDiff) {
 }
 
 TEST(TestSpatialTree, ManyValueTypes) {
-    st::internal::spatial_tree<float>                    floating;
-    st::internal::spatial_tree<std::string>              str;
-    st::internal::spatial_tree<std::vector<std::string>> vec;
-    st::internal::spatial_tree                           nothing;
+    st::internal::__spatial_tree<float>                    floating;
+    st::internal::__spatial_tree<std::string>              str;
+    st::internal::__spatial_tree<std::vector<std::string>> vec;
+    st::internal::__spatial_tree                           nothing;
 }
 
 TEST(TestSpatialTree, MutableAccesses) {
@@ -280,32 +280,34 @@ TEST(TestSpatialTree, UniqueInsertions) {
             const auto inner_test = [&]<typename TreeType>(auto &tree) {
                 for (uint64_t i = 1; i <= test_size; ++i) {
                     CoordT coord = i;
-                    ASSERT_TRUE(tree.emplace(coord, coord, i).second);
-                    ASSERT_TRUE(tree.emplace(coord, -coord, i).second);
-                    ASSERT_TRUE(tree.emplace(-coord, coord, i).second);
-                    ASSERT_TRUE(tree.emplace(-coord, -coord, i).second);
+                    ASSERT_TRUE(tree.emplace({coord, coord}, i).second);
+                    ASSERT_TRUE(tree.emplace({coord, -coord}, i).second);
+                    ASSERT_TRUE(tree.emplace({-coord, coord}, i).second);
+                    ASSERT_TRUE(tree.emplace({-coord, -coord}, i).second);
                 }
                 ASSERT_EQ(tree.size(), 4 * test_size);
                 ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
                 tree.clear();
             };
             CoordT                         bound = test_size;
-            const st::bounding_box<CoordT> bounds({-bound, bound, bound, -bound});
+            const st::__bounding_box<CoordT, 2> bounds({-bound, -bound, bound, bound});
 
-            st::internal::spatial_tree<int, CoordT> bounded(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
+            st::internal::__spatial_tree<int, CoordT> bounded(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT>>(bounded);
 
-            st::internal::spatial_tree<int, CoordT> unbounded;
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(unbounded);
+            st::internal::__spatial_tree<int, CoordT> unbounded;
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT>>(unbounded);
 
-            st::internal::spatial_tree<int, CoordT, 1> small_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 1>>(small_size);
+            st::internal::__spatial_tree<int, CoordT, 2, 1> small_size(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 1>>(
+                small_size);
 
-            st::internal::spatial_tree<int, CoordT, 16> large_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 16>>(large_size);
+            st::internal::__spatial_tree<int, CoordT, 2, 16> large_size(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 16>>(
+                large_size);
 
-            st::internal::spatial_tree<int, CoordT, 7> odd_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 7>>(odd_size);
+            st::internal::__spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
+            inner_test.template operator()<st::internal::__spatial_tree<int, CoordT, 7>>(odd_size);
         }
     };
     typed_test.operator()<float>();
