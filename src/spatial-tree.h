@@ -47,6 +47,15 @@ inline void unroll_for(InductionVarType start, InductionVarType stop, const Func
     }
 }
 
+template <typename T>
+inline constexpr T pow(T base, uint64_t exponent) {
+    for (uint64_t i = 1; i < exponent; ++i) {
+        base *= exponent;
+    }
+
+    return base;
+}
+
 template <typename CoordinateType, uint64_t rank>
 inline bool equal(std::array<CoordinateType, rank> lhs, std::array<CoordinateType, rank> rhs) {
     bool same = true;
@@ -241,7 +250,7 @@ struct __bounding_box {
     }
 
     inline __bounding_box<CoordinateType, rank> qrecurse(uint64_t quad) const {
-        assert(quad < std::pow(2, rank));
+        assert(quad < internal::pow(2, rank));
         std::array<CoordinateType, rank * 2> boundary;
         internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
             CoordinateType span = stops[i] - starts[i];
@@ -323,7 +332,7 @@ public:
                     return;
                 }
 
-                for (uint64_t child = 0; child < std::pow(2, rank); ++child) {
+                for (uint64_t child = 0; child < internal::pow(2, rank); ++child) {
                     const uint64_t child_index = node.branch.index_of_first_child + child;
                     const auto     new_boundary = compute_new_boundary(child, boundary);
                     walk_recursively(child_index, new_boundary);
@@ -355,7 +364,11 @@ public:
 
         inline auto operator*() const { return tree_->operator()(node_index_, item_index_); }
         inline auto operator*() {
-            return const_cast<__spatial_tree *>(tree_)->operator()(node_index_, item_index_);
+            return const_cast<
+                       __spatial_tree<StorageType, CoordinateType, rank, MAXIMUM_NODE_SIZE> *>(
+                       tree_)
+                ->
+                operator()(node_index_, item_index_);
         }
         inline auto operator->() const { return this->operator(); }
         inline auto operator->() { return this->operator(); }
@@ -425,6 +438,15 @@ public:
 
     inline bool erase(std::array<CoordinateType, rank> point) {
         return erase_recursively(0, boundary_, size(), point);
+    }
+
+    template <typename Func>
+    inline void find(const __bounding_box<CoordinateType> &bbox, Func func) const {
+        find_recursively(bbox, boundary_, func, 0);
+    }
+
+    inline iterator find(std::array<CoordinateType, rank> point) const {
+        return find_recursively(point, boundary_, 0);
     }
 
 private:
@@ -513,6 +535,33 @@ private:
         }
     };
 
+    inline auto operator()(uint64_t node_index, uint64_t item_index) const {
+        assert(node_index < nodes_.size());
+        const tree_node &node = nodes_[node_index];
+
+        assert(node.is_a_leaf());
+        assert(item_index < node.leaf.size);
+
+        if constexpr (std::is_void_v<StorageType>) {
+            return node.leaf.items[item_index].coordinates;
+        } else {
+            auto               coordinates = node.leaf.items[item_index].coordinates;
+            const StorageType &storage = node.leaf.items[item_index].storage;
+            return std::tuple<decltype(coordinates), const StorageType &>(coordinates, storage);
+        }
+    }
+
+    inline auto operator()(uint64_t node_index, uint64_t item_index) {
+        auto this_as_const = const_cast<const __spatial_tree *>(this);
+        if constexpr (std::is_void_v<StorageType>) {
+            return this_as_const->operator()(node_index, item_index);
+        } else {
+            const auto [coordinates, storage] = this_as_const->operator()(node_index, item_index);
+            return std::tuple<decltype(coordinates), StorageType &>(
+                coordinates, const_cast<StorageType &>(storage));
+        }
+    }
+
     template <typename... Args>
     inline std::pair<iterator, bool> emplace_recursively_helper(
         uint64_t                              index_of_first_child,
@@ -578,7 +627,7 @@ private:
             freed_nodes_.pop_back();
         } else {
             new_index_of_first_child = nodes_.size();
-            nodes_.resize(nodes_.size() + std::pow(2, rank));
+            nodes_.resize(nodes_.size() + internal::pow(2, rank));
         }
 
         // nodes_.resize may have reallocated.
@@ -637,7 +686,7 @@ private:
 
         tree_node &node = nodes_[node_index];
         if (node.is_a_leaf()) {
-            for (uint8_t i = 0; i < node.leaf.size; ++i) {
+            __unroll_4 for (uint8_t i = 0; i < node.leaf.size; ++i) {
                 if (internal::equal<CoordinateType, rank>(point, node.leaf.items[i].coordinates)) {
                     uint64_t last_index = node.leaf.size - 1;
                     if (last_index != i) {
@@ -675,13 +724,60 @@ private:
         /// EXPLANATION: Not doing it at the root because of the union.
         uint64_t index_of_first_child = node.branch.index_of_first_child;
         node.reset();
-        for (uint64_t quad = 0; quad < std::pow(2, rank); ++quad) {
+        static constexpr uint64_t N_CHILDREN = internal::pow(2, rank);
+        internal::unroll_for<N_CHILDREN>(uint64_t(0), N_CHILDREN, [&](auto quad) {
             recursively_gather_points(index_of_first_child + quad, node.leaf);
-        }
+        });
         freed_nodes_.push_back(index_of_first_child);
         assert(node.leaf.size <= MAXIMUM_NODE_SIZE);
 
         return true;
+    }
+
+    inline iterator find_recursively(std::array<CoordinateType, rank>      point,
+                                     const __bounding_box<CoordinateType> &boundary,
+                                     uint64_t                              node_index) const {
+        assert(node_index < nodes_.size());
+
+        const tree_node &node = nodes_[node_index];
+        if (node.is_a_leaf()) {
+            __unroll_4 for (uint64_t i = 0; i < node.leaf.size; ++i) {
+                if (internal::equal<CoordinateType, rank>(point, node.leaf.items[i].coordinates)) {
+                    return iterator(this, node_index, i);
+                }
+            }
+            return end();
+        }
+
+        const auto [new_boundary, selected_quad] = boundary.recurse(point);
+        return find_recursively(
+            point, new_boundary, node.branch.index_of_first_child + selected_quad);
+    }
+
+    template <typename Func>
+    inline void find_recursively(const __bounding_box<CoordinateType> &bbox,
+                                 const __bounding_box<CoordinateType> &boundary,
+                                 Func                                  func,
+                                 uint64_t                              node_index) const {
+        assert(node_index < nodes_.size());
+
+        const tree_node &node = nodes_[node_index];
+        if (node.is_a_leaf()) {
+            __unroll_4 for (uint64_t i = 0; i < node.leaf.size; ++i) {
+                if (bbox.contains(node.leaf.items[i].coordinates)) {
+                    func(iterator(this, node_index, i));
+                }
+            }
+            return;
+        }
+
+        static constexpr uint64_t N_CHILDREN = internal::pow(2, rank);
+        internal::unroll_for<N_CHILDREN>(uint64_t(0), N_CHILDREN, [&](auto quad) {
+            auto new_boundary = boundary.qrecurse(quad);
+            if (bbox.overlaps(new_boundary)) {
+                find_recursively(bbox, new_boundary, func, node.branch.index_of_first_child + quad);
+            }
+        });
     }
 
     const __bounding_box<CoordinateType, rank> boundary_;

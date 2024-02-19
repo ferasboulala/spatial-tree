@@ -117,19 +117,19 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            tree.emplace(x, y);
+            tree.emplace({x, y});
         }
     }
 
     static constexpr uint64_t n_bounding_boxes = 1 << 16;
     const auto                bounding_boxes_points = generate_points(BEG, END, n_bounding_boxes);
-    std::vector<st::bounding_box<CoordT>> bounding_boxes;
+    std::vector<st::__bounding_box<CoordT>> bounding_boxes;
     bounding_boxes.reserve(n_bounding_boxes);
     for (uint64_t i = 0; i < n_bounding_boxes; ++i) {
         auto [x1, y1] = bounding_boxes_points[i];
         auto x2 = x1 + BBOX_DIM_SIZE;
         auto y2 = y1 + BBOX_DIM_SIZE;
-        bounding_boxes.emplace_back(x1, y2, x2, y1);
+        bounding_boxes.push_back(st::__bounding_box<CoordT>({x1, y1, x2, y2}));
     }
 
     uint64_t n_points_found = 0;
@@ -158,7 +158,7 @@ void benchmark_find_single(benchmark::State &state, TreeType &tree) {
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            tree.emplace(x, y);
+            tree.emplace({x, y});
         }
     }
 
@@ -167,7 +167,7 @@ void benchmark_find_single(benchmark::State &state, TreeType &tree) {
 
     for (auto _ : state) {
         for (auto [x, y] : points_to_find) {
-            tree.find(x, y);
+            tree.find({x, y});
         }
     }
     state.SetItemsProcessed(n_points_to_find * state.iterations());
@@ -327,7 +327,8 @@ void find(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
 
-    auto tree = st::internal::spatial_tree<VALUE_TYPE, CoordT, MAX_NODE_SIZE>({BEG, END, END, BEG});
+    auto tree = st::internal::__spatial_tree<VALUE_TYPE, CoordT, 2, MAX_NODE_SIZE>(
+        st::__bounding_box<CoordT, 2>({BEG, BEG, END, END}));
     benchmark_find<CoordT>(state, tree);
 }
 
@@ -336,7 +337,8 @@ void find_single(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
 
-    auto tree = st::internal::spatial_tree<VALUE_TYPE, CoordT, MAX_NODE_SIZE>({BEG, END, END, BEG});
+    auto tree = st::internal::__spatial_tree<VALUE_TYPE, CoordT, 2, MAX_NODE_SIZE>(
+        st::__bounding_box<CoordT, 2>({BEG, BEG, END, END}));
     benchmark_find_single<CoordT>(state, tree);
 }
 
@@ -359,8 +361,8 @@ BENCHMARK(nearest<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 
 // BENCHMARK(hash_table_oracle<int, COORD_TYPE>::insertions)->RangeMultiplier(2)->Range(LOW, HIGH);
 // BENCHMARK(hash_table_oracle<int, COORD_TYPE>::deletions)->RangeMultiplier(2)->Range(LOW, HIGH);
-BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find)->RangeMultiplier(2)->Range(LOW, HIGH);
-BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find_single)->RangeMultiplier(2)->Range(LOW, HIGH);
+// BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find)->RangeMultiplier(2)->Range(LOW, HIGH);
+// BENCHMARK(hash_table_oracle<int, COORD_TYPE>::find_single)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(hash_table_oracle<int, COORD_TYPE>::nearest)->RangeMultiplier(2)->Range(LOW, HIGH);
 
 BENCHMARK_MAIN();
