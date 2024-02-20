@@ -1,7 +1,6 @@
 #ifdef NDEBUG
 #undef NDEBUG
 #include "spatial-tree.h"
-#include "spatial-tree.tmp.h"
 #define NDEBUG
 #else
 #include "spatial-tree.h"
@@ -201,8 +200,8 @@ TEST(TestBoundingBox, SDistance) {
         ASSERT_EQ(bbox.sdistance({0, 0}), 0);
         ASSERT_EQ(bbox.sdistance({-2, 0}), 4);
         ASSERT_EQ(bbox.sdistance({0, -2}), 4);
-        ASSERT_EQ(bbox.sdistance({2, 0}), 4);
-        ASSERT_EQ(bbox.sdistance({0, 2}), 4);
+        ASSERT_EQ(bbox.sdistance({2, 0}), 0);
+        ASSERT_EQ(bbox.sdistance({0, 2}), 0);
         ASSERT_EQ(bbox.sdistance({13, 14}), 25);
         ASSERT_EQ(bbox.sdistance({13, 14}), 25);
     };

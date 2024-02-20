@@ -18,7 +18,6 @@
 #define __unroll_8 _Pragma("clang loop unroll_count(8)")
 #endif
 
-#include <array>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -217,26 +216,24 @@ struct bounding_box {
 
     template <bool strict = false>
     inline bool contains(std::array<CoordinateType, rank> point) const {
-        for (uint64_t i = 0; i < rank; ++i) {
-            if (!internal::is_within_interval<CoordinateType, strict>(
-                    point[i], starts[i], stops[i])) {
-                return false;
-            }
-        }
+        bool is_contained = true;
+        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+            is_contained &=
+                internal::is_within_interval<CoordinateType, strict>(point[i], starts[i], stops[i]);
+        });
 
-        return true;
+        return is_contained;
     }
 
     template <bool strict = false>
     inline bool overlaps(const bounding_box<CoordinateType, rank> &other) const {
-        for (uint64_t i = 0; i < rank; ++i) {
-            if (!internal::intervals_overlap<CoordinateType, strict>(
-                    starts[i], stops[i], other.starts[i], other.stops[i])) {
-                return false;
-            }
-        }
+        bool is_overlapping = true;
+        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+            is_overlapping &= internal::intervals_overlap<CoordinateType, strict>(
+                starts[i], stops[i], other.starts[i], other.stops[i]);
+        });
 
-        return true;
+        return is_overlapping;
     }
 
     inline std::array<CoordinateType, rank> origin() const {
@@ -270,8 +267,9 @@ struct bounding_box {
             CoordinateType span = stops[i] - starts[i];
             CoordinateType new_span = span / 2;
             CoordinateType remainder = span - 2 * new_span;
+            bool           gt = point[i] > origins[i];
 
-            bool gt = point[i] > origins[i];
+            // Faster than branchless.
             if (gt) {
                 boundary[i] = starts[i] + new_span;
                 boundary[i + rank] = stops[i];
@@ -633,9 +631,8 @@ private:
             return ret;
         }
 
-        // SIMD this shit.
         uint64_t item_index = 0;
-        __unroll_4 for (uint64_t i = 0; i < node.leaf.size; ++i) {
+        for (uint64_t i = 0; i < node.leaf.size; ++i) {
             const bool same =
                 internal::equal<CoordinateType, rank>(point, node.leaf.items[i].coordinates);
             item_index += (i + 1) * same;
@@ -728,7 +725,7 @@ private:
 
         tree_node &node = nodes_[node_index];
         if (node.is_a_leaf()) {
-            __unroll_4 for (uint8_t i = 0; i < node.leaf.size; ++i) {
+            for (uint8_t i = 0; i < node.leaf.size; ++i) {
                 if (internal::equal<CoordinateType, rank>(point, node.leaf.items[i].coordinates)) {
                     uint64_t last_index = node.leaf.size - 1;
                     if (last_index != i) {
@@ -783,7 +780,7 @@ private:
 
         const tree_node &node = nodes_[node_index];
         if (node.is_a_leaf()) {
-            __unroll_4 for (uint64_t i = 0; i < node.leaf.size; ++i) {
+            for (uint64_t i = 0; i < node.leaf.size; ++i) {
                 if (internal::equal<CoordinateType, rank>(point, node.leaf.items[i].coordinates)) {
                     return iterator(this, node_index, i);
                 }
@@ -805,7 +802,7 @@ private:
 
         const tree_node &node = nodes_[node_index];
         if (node.is_a_leaf()) {
-            __unroll_4 for (uint64_t i = 0; i < node.leaf.size; ++i) {
+            for (uint64_t i = 0; i < node.leaf.size; ++i) {
                 if (bbox.contains(node.leaf.items[i].coordinates)) {
                     func(iterator(this, node_index, i));
                 }
@@ -832,7 +829,7 @@ private:
         const tree_node &node = nodes_[node_index];
 
         if (node.is_a_leaf()) {
-            __unroll_4 for (uint64_t i = 0; i < node.leaf.size; ++i) {
+            for (uint64_t i = 0; i < node.leaf.size; ++i) {
                 auto distance = euclidean_distance_squared_arr<CoordinateType, rank>(
                     point, node.leaf.items[i].coordinates);
                 if (distance < nearest_distance_squared) {
