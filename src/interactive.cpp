@@ -9,16 +9,16 @@ static const char       *window_name = "canvas";
 
 #define DRAW
 #ifdef DRAW
-static constexpr uint64_t                       CANVAS_HEIGHT = 1500;
-static constexpr int                            POINT_RADIUS = 10;
-static constexpr uint64_t                       CANVAS_WIDTH = 2500;
-static cv::Mat                                  canvas;
-static st::spatial_set<int, MAXIMUM_NODE_SIZE> *points;
+static constexpr int                               CANVAS_HEIGHT = 1500;
+static constexpr int                               POINT_RADIUS = 10;
+static constexpr int                               CANVAS_WIDTH = 2500;
+static cv::Mat                                     canvas;
+static st::spatial_set<int, 2, MAXIMUM_NODE_SIZE> *points;
 
 void mouse_callback(int event, int x, int y, int, void *) {
     if (event != cv::EVENT_LBUTTONDOWN) return;
 
-    auto                 res = points->nearest(y, x);
+    auto                 res = points->nearest({y, x});
     static constexpr int min_distance_squared = POINT_RADIUS * POINT_RADIUS;
     int                  distance_squared = std::numeric_limits<int>::max();
     if (!res.empty()) {
@@ -29,16 +29,20 @@ void mouse_callback(int event, int x, int y, int, void *) {
     if (distance_squared <= min_distance_squared) {
         for (auto it : res) {
             auto [y_, x_] = *it;
-            points->erase(y_, x_);
+            points->erase({y_, x_});
         }
     } else {
-        points->emplace(y, x);
+        points->emplace({y, x});
     }
 
     canvas = cv::Mat::zeros(CANVAS_HEIGHT, CANVAS_WIDTH, CV_8UC3);
     points->walk([&](auto boundaries, bool is_leaf) {
         if (is_leaf) return;
-        auto [top_x, top_y, bottom_x, bottom_y] = boundaries;
+        auto top_x = boundaries.starts[0];
+        auto bottom_y = boundaries.starts[1];
+        auto bottom_x = boundaries.stops[0];
+        auto top_y = boundaries.stops[1];
+
         auto mid_x = (top_x + bottom_x) / 2;
         auto mid_y = (top_y + bottom_y) / 2;
 
@@ -56,12 +60,11 @@ int main() {
     cv::setMouseCallback(window_name, mouse_callback);
 
     canvas = cv::Mat::zeros(CANVAS_HEIGHT, CANVAS_WIDTH, CV_8UC3);
-    points = new st::spatial_set<int, MAXIMUM_NODE_SIZE>({0, CANVAS_WIDTH, CANVAS_HEIGHT, 0});
+    st::spatial_set<int, 2, MAXIMUM_NODE_SIZE> tree({0, 0, CANVAS_HEIGHT, CANVAS_WIDTH});
+    points = &tree;
     do {
         cv::imshow(window_name, canvas);
     } while (cv::waitKey(0) != 113);
-
-    delete points;
 
     return 0;
 }
