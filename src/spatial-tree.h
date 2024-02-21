@@ -70,12 +70,12 @@ inline void set(std::array<CoordinateType, rank> &dst, std::array<CoordinateType
 }
 
 template <typename AbsDiff, typename T, typename... Args>
-static inline T euclidean_distance_squared_impl(AbsDiff) {
+inline T euclidean_distance_squared_impl(AbsDiff) {
     return T(0);
 }
 
 template <typename AbsDiff, typename T, typename... Args>
-static inline T euclidean_distance_squared_impl(AbsDiff absdiff, T x1, T x2, Args... xs) {
+inline T euclidean_distance_squared_impl(AbsDiff absdiff, T x1, T x2, Args... xs) {
     const T sum = euclidean_distance_squared_impl<AbsDiff, T>(absdiff, xs...);
     const T dx = absdiff(x2, x1);
 
@@ -98,7 +98,7 @@ struct UnsafeAbsDiff {
 };
 
 template <typename T>
-static inline T absdiff(T x, T y) {
+inline T absdiff(T x, T y) {
     if constexpr (std::is_floating_point_v<T>) {
         return std::fabs(UnsafeAbsDiff<T>()(x, y));
     } else {
@@ -107,7 +107,7 @@ static inline T absdiff(T x, T y) {
 }
 
 template <typename T, typename... Args>
-static inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
+inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
     if constexpr (std::is_floating_point_v<T> || std::is_signed_v<T>) {
         return euclidean_distance_squared_impl(UnsafeAbsDiff<T>(), x1, x2, xs...);
     } else {
@@ -116,7 +116,7 @@ static inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
 }
 
 template <typename AbsDiff, typename T, uint64_t rank>
-static inline T euclidean_distance_squared_arr_impl(AbsDiff             absdiff,
+inline T euclidean_distance_squared_arr_impl(AbsDiff             absdiff,
                                                     std::array<T, rank> lhs,
                                                     std::array<T, rank> rhs) {
     T sum = 0;
@@ -129,7 +129,7 @@ static inline T euclidean_distance_squared_arr_impl(AbsDiff             absdiff,
 }
 
 template <typename T, uint64_t rank>
-static inline T euclidean_distance_squared_arr(std::array<T, rank> lhs, std::array<T, rank> rhs) {
+inline T euclidean_distance_squared_arr(std::array<T, rank> lhs, std::array<T, rank> rhs) {
     if constexpr (std::is_floating_point_v<T> || std::is_signed_v<T>) {
         return euclidean_distance_squared_arr_impl<UnsafeAbsDiff<T>, T, rank>(
             UnsafeAbsDiff<T>(), lhs, rhs);
@@ -140,7 +140,7 @@ static inline T euclidean_distance_squared_arr(std::array<T, rank> lhs, std::arr
 }
 
 template <typename CoordinateType, bool strict = false>
-static inline bool is_within_interval(CoordinateType x, CoordinateType beg, CoordinateType end) {
+inline bool is_within_interval(CoordinateType x, CoordinateType beg, CoordinateType end) {
     assert(end >= beg);
 
     if constexpr (strict) {
@@ -151,7 +151,7 @@ static inline bool is_within_interval(CoordinateType x, CoordinateType beg, Coor
 }
 
 template <typename CoordinateType, bool strict = false>
-static inline bool intervals_overlap(CoordinateType lhs_beg,
+inline bool intervals_overlap(CoordinateType lhs_beg,
                                      CoordinateType lhs_end,
                                      CoordinateType rhs_beg,
                                      CoordinateType rhs_end) {
@@ -209,7 +209,7 @@ struct bounding_box {
     inline CoordinateType area() const {
         CoordinateType area = 1;
         internal::unroll_for<rank>(
-            uint64_t(0), rank, [&](auto i) { area *= (stops[i] - starts[i]); });
+            uint64_t(0), rank, [&](auto i) { area *= stops[i] - starts[i]; });
 
         return area;
     }
@@ -246,7 +246,7 @@ struct bounding_box {
     }
 
     inline uint64_t quadrant(std::array<CoordinateType, rank> point) const {
-        // Contract: lower region is ceiled, upper region is floored. (<)
+        // Contract: lower region is ceiled, upper region is floored. (>)
         // Assumes the bbox is infinite.
         uint64_t   quadrant = 0;
         const auto origins = origin();
@@ -266,8 +266,8 @@ struct bounding_box {
         internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
             CoordinateType span = stops[i] - starts[i];
             CoordinateType new_span = span / 2;
-            CoordinateType remainder = span - 2 * new_span;
-            bool           gt = point[i] > origins[i];
+            // Contract: lower region is ceiled, upper region is floored. (>)
+            bool gt = point[i] > origins[i];
 
             // Faster than branchless.
             if (gt) {
@@ -275,6 +275,7 @@ struct bounding_box {
                 boundary[i + rank] = stops[i];
                 quad |= (1 << i);
             } else {
+                CoordinateType remainder = span - 2 * new_span;
                 boundary[i] = starts[i];
                 boundary[i + rank] = stops[i] - (new_span + remainder);
             }
@@ -490,8 +491,6 @@ public:
     }
 
 private:
-    using cartesian_quadrant = int;
-
     struct tree_node_with_storage {
         std::array<CoordinateType, rank> coordinates;
         StorageType                      storage;
@@ -512,47 +511,47 @@ private:
                                                 tree_node_with_storage>::type {};
 
     struct tree_node_leaf {
-        uint8_t                                          size;
         std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
+        uint8_t                                          size;
 
-        tree_node_leaf(const tree_node_leaf &other) {
+        inline tree_node_leaf(const tree_node_leaf &other) {
             for (uint64_t i = 0; i < size; ++i) {
                 items[i] = other.items[i];
             }
             size = other.size;
         }
 
-        tree_node_leaf(tree_node_leaf &&other) {
+        inline tree_node_leaf(tree_node_leaf &&other) {
             for (uint64_t i = 0; i < size; ++i) {
                 items[i] = std::move(other.items[i]);
             }
             size = other.size;
         }
 
-        tree_node_leaf() = default;
-        ~tree_node_leaf() {
+        inline tree_node_leaf() = default;
+        inline ~tree_node_leaf() {
             for (uint64_t i = 0; i < size; ++i) {
                 items[i].~tree_node_storage();
             }
         }
 
-        tree_node_leaf &operator=(tree_node_leaf &&) = default;
+        inline tree_node_leaf &operator=(tree_node_leaf &&) = default;
     };
 
     struct tree_node_branch {
         // Children are adjacent in memory.
-        uint64_t index_of_first_child;
         uint64_t size;
+        uint64_t index_of_first_child;
     };
 
     struct tree_node {
         static constexpr uint64_t NO_INDEX = std::numeric_limits<uint64_t>::max();
 
-        bool is_branch;
         union {
             tree_node_leaf   leaf;
             tree_node_branch branch;
         };
+        bool is_branch;
 
         inline tree_node() { reset(); }
         inline tree_node(tree_node &&other) : is_branch(other.is_branch) {

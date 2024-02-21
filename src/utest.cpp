@@ -54,7 +54,7 @@ TEST(TestBoundingBox, TestDefaultConstructor) {
 
 TEST(TestBoundingBox, TestConstructor) {
     const auto typed_test = [&]<typename CoordT>() {
-        const st::bounding_box<CoordT, 3> bbox({0, 0, 0, 3, 4, 5});
+        const st::bounding_box<CoordT, 3> bbox = {0, 0, 0, 3, 4, 5};
         ASSERT_EQ(bbox.starts.size(), CoordT(3));
         ASSERT_EQ(bbox.stops.size(), CoordT(3));
         ASSERT_EQ(bbox.area(), CoordT(3 * 4 * 5));
@@ -67,13 +67,13 @@ TEST(TestBoundingBox, TestConstructor) {
 
 TEST(TestBoundingBox, Contains) {
     const auto typed_test = [&]<typename CoordT>() {
-        const st::bounding_box<CoordT, 1> vec({0, 10});
+        const st::bounding_box<CoordT, 1> vec = {0, 10};
         ASSERT_TRUE(vec.contains({0}));
         ASSERT_TRUE(vec.contains({5}));
         ASSERT_TRUE(vec.contains({10}));
         ASSERT_FALSE(vec.contains({11}));
 
-        const st::bounding_box<CoordT, 2> mat({0, 0, 10, 10});
+        const st::bounding_box<CoordT, 2> mat = {0, 0, 10, 10};
         ASSERT_TRUE(mat.contains({0, 0}));
         ASSERT_TRUE(mat.contains({0, 5}));
         ASSERT_TRUE(mat.contains({5, 0}));
@@ -89,25 +89,25 @@ TEST(TestBoundingBox, Contains) {
 
 TEST(TestBoundingBox, Overlaps) {
     const auto typed_test = [&]<typename CoordT>() {
-        const st::bounding_box<CoordT, 2> lhs({0, 0, 10, 10});
+        const st::bounding_box<CoordT, 2> lhs = {0, 0, 10, 10};
         ASSERT_TRUE(lhs.overlaps(lhs));
 
         for (CoordT i = -10; i < -5; ++i) {
-            const st::bounding_box<CoordT, 2> rhs({i, i, i + 5, i + 5});
+            const st::bounding_box<CoordT, 2> rhs = {i, i, i + 5, i + 5};
             ASSERT_TRUE(rhs.overlaps(rhs));
             ASSERT_FALSE(lhs.overlaps(rhs));
             ASSERT_FALSE(rhs.overlaps(lhs));
         }
 
         for (CoordT i = -5; i < 10; ++i) {
-            const st::bounding_box<CoordT, 2> rhs({i, i, i + 5, i + 5});
+            const st::bounding_box<CoordT, 2> rhs = {i, i, i + 5, i + 5};
             ASSERT_TRUE(rhs.overlaps(rhs));
             ASSERT_TRUE(lhs.overlaps(rhs));
             ASSERT_TRUE(rhs.overlaps(lhs));
         }
 
         for (CoordT i = 11; i < 15; ++i) {
-            const st::bounding_box<CoordT, 2> rhs({i, i, i + 5, i + 5});
+            const st::bounding_box<CoordT, 2> rhs = {i, i, i + 5, i + 5};
             ASSERT_TRUE(rhs.overlaps(rhs));
             ASSERT_FALSE(lhs.overlaps(rhs));
             ASSERT_FALSE(rhs.overlaps(lhs));
@@ -121,7 +121,7 @@ TEST(TestBoundingBox, Overlaps) {
 
 TEST(TestBoundingBox, BelongsToQuadrant) {
     const auto typed_test = [&]<typename CoordT>() {
-        const st::bounding_box<CoordT, 1> bbox1({0, 10});
+        const st::bounding_box<CoordT, 1> bbox1 = {0, 10};
         for (CoordT i = 0; i <= 5; ++i) {
             ASSERT_EQ(bbox1.quadrant({i}), 0);
         }
@@ -130,7 +130,7 @@ TEST(TestBoundingBox, BelongsToQuadrant) {
             ASSERT_EQ(bbox1.quadrant({i}), 1);
         }
 
-        const st::bounding_box<CoordT, 2> bbox2({0, 0, 10, 10});
+        const st::bounding_box<CoordT, 2> bbox2 = {0, 0, 10, 10};
         for (CoordT i = 0; i <= 5; ++i) {
             ASSERT_EQ(bbox2.quadrant({i, i}), 0);
         }
@@ -147,11 +147,11 @@ TEST(TestBoundingBox, BelongsToQuadrant) {
 
 TEST(TestBoundingBox, QRecurse) {
     const auto typed_test = [&]<typename CoordT>() {
-        const st::bounding_box<CoordT, 1> bbox1({0, 10});
+        const st::bounding_box<CoordT, 1> bbox1 = {0, 10};
         ASSERT_EQ(bbox1.qrecurse(0), (st::bounding_box<CoordT, 1>({0, 5})));
         ASSERT_EQ(bbox1.qrecurse(1), (st::bounding_box<CoordT, 1>({5, 10})));
 
-        const st::bounding_box<CoordT, 2> bbox2({0, 0, 10, 10});
+        const st::bounding_box<CoordT, 2> bbox2 = {0, 0, 10, 10};
         ASSERT_EQ(bbox2.qrecurse(0), (st::bounding_box<CoordT, 2>({0, 0, 5, 5})));
         ASSERT_EQ(bbox2.qrecurse(1), (st::bounding_box<CoordT, 2>({5, 0, 10, 5})));
         ASSERT_EQ(bbox2.qrecurse(2), (st::bounding_box<CoordT, 2>({0, 5, 5, 10})));
@@ -165,22 +165,18 @@ TEST(TestBoundingBox, QRecurse) {
 
 TEST(TestBoundingBox, Recurse) {
     const auto typed_test = [&]<typename CoordT>() {
-        const st::bounding_box<CoordT, 1> bbox1({0, 10});
-        ASSERT_EQ(std::get<0>(bbox1.recurse({2})), (st::bounding_box<CoordT, 1>({0, 5})));
-        ASSERT_EQ(std::get<0>(bbox1.recurse({7})), (st::bounding_box<CoordT, 1>({5, 10})));
+        const st::bounding_box<CoordT, 1> bbox1 = {0, 10};
+        ASSERT_EQ(std::get<0>(bbox1.recurse({2})), (st::bounding_box<CoordT, 1>{0, 5}));
+        ASSERT_EQ(std::get<0>(bbox1.recurse({7})), (st::bounding_box<CoordT, 1>{5, 10}));
 
         ASSERT_EQ(std::get<1>(bbox1.recurse({2})), 0);
         ASSERT_EQ(std::get<1>(bbox1.recurse({7})), 1);
 
-        const st::bounding_box<CoordT, 2> bbox2({0, 0, 10, 10});
-        ASSERT_EQ(std::get<0>(bbox2.recurse({2, 2})),
-                  (st::bounding_box<CoordT, 2>({0, 0, 5, 5})));
-        ASSERT_EQ(std::get<0>(bbox2.recurse({7, 2})),
-                  (st::bounding_box<CoordT, 2>({5, 0, 10, 5})));
-        ASSERT_EQ(std::get<0>(bbox2.recurse({2, 7})),
-                  (st::bounding_box<CoordT, 2>({0, 5, 5, 10})));
-        ASSERT_EQ(std::get<0>(bbox2.recurse({7, 7})),
-                  (st::bounding_box<CoordT, 2>({5, 5, 10, 10})));
+        const st::bounding_box<CoordT, 2> bbox2 = {0, 0, 10, 10};
+        ASSERT_EQ(std::get<0>(bbox2.recurse({2, 2})), (st::bounding_box<CoordT, 2>{0, 0, 5, 5}));
+        ASSERT_EQ(std::get<0>(bbox2.recurse({7, 2})), (st::bounding_box<CoordT, 2>{5, 0, 10, 5}));
+        ASSERT_EQ(std::get<0>(bbox2.recurse({2, 7})), (st::bounding_box<CoordT, 2>{0, 5, 5, 10}));
+        ASSERT_EQ(std::get<0>(bbox2.recurse({7, 7})), (st::bounding_box<CoordT, 2>{5, 5, 10, 10}));
 
         ASSERT_EQ(std::get<1>(bbox2.recurse({2, 2})), 0);
         ASSERT_EQ(std::get<1>(bbox2.recurse({7, 2})), 1);
@@ -196,7 +192,7 @@ TEST(TestBoundingBox, Recurse) {
 // TODO: Test when a point is inside the bbox.
 TEST(TestBoundingBox, SDistance) {
     const auto typed_test = [&]<typename CoordT>() {
-        const st::bounding_box<CoordT, 2> bbox({0, 0, 10, 10});
+        const st::bounding_box<CoordT, 2> bbox = {0, 0, 10, 10};
         ASSERT_EQ(bbox.sdistance({0, 0}), 0);
         ASSERT_EQ(bbox.sdistance({-2, 0}), 4);
         ASSERT_EQ(bbox.sdistance({0, -2}), 4);
@@ -265,7 +261,7 @@ TEST(TestSpatialTree, ManyValueTypes) {
 
 TEST(TestSpatialTree, MutableAccesses) {
     st::internal::spatial_tree<int, int, 2> tree;
-    auto                            it = tree.emplace({0, 0}, 0).first;
+    auto                                    it = tree.emplace({0, 0}, 0).first;
     auto [coordinates, data1] = *it;
     ++data1;
     it = tree.find({0, 0});
@@ -289,8 +285,8 @@ TEST(TestSpatialTree, UniqueInsertions) {
                 ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
                 tree.clear();
             };
-            CoordT                              bound = test_size;
-            const st::bounding_box<CoordT, 2> bounds({-bound, -bound, bound, bound});
+            CoordT                            bound = test_size;
+            const st::bounding_box<CoordT, 2> bounds = {-bound, -bound, bound, bound};
 
             st::internal::spatial_tree<int, CoordT, 2> bounded(bounds);
             inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2>>(bounded);
@@ -307,8 +303,7 @@ TEST(TestSpatialTree, UniqueInsertions) {
                 large_size);
 
             st::internal::spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(
-                odd_size);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(odd_size);
         }
     };
     typed_test.operator()<float>();
@@ -356,8 +351,8 @@ TEST(TestSpatialTree, UniqueDeletions) {
                 ASSERT_TRUE(tree.empty());
                 ASSERT_EQ(tree.size(), std::distance(tree.begin(), tree.end()));
             };
-            CoordT                           bound = test_size;
-            const st::bounding_box<CoordT> bounds({-bound, -bound, bound, bound});
+            CoordT                         bound = test_size;
+            const st::bounding_box<CoordT> bounds = {-bound, -bound, bound, bound};
 
             st::internal::spatial_tree<int, CoordT, 2> bounded(bounds);
             inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2>>(bounded);
@@ -374,8 +369,7 @@ TEST(TestSpatialTree, UniqueDeletions) {
                 large_size);
 
             st::internal::spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(
-                odd_size);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(odd_size);
         }
     };
     typed_test.operator()<float>();
@@ -422,8 +416,8 @@ TEST(TestSpatialTree, RandomInsertionsAndDeletions) {
                 tree.clear();
             }
         };
-        const st::bounding_box<CoordT> bounds(
-            {DISTRIBUTION_BEG, DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END});
+        const st::bounding_box<CoordT> bounds = {
+            DISTRIBUTION_BEG, DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END};
 
         st::internal::spatial_tree<int, CoordT, 2> bounded(bounds);
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT>>(bounded);
@@ -432,8 +426,7 @@ TEST(TestSpatialTree, RandomInsertionsAndDeletions) {
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 1>>(small_size);
 
         st::internal::spatial_tree<int, CoordT, 2, 16> large_size(bounds);
-        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 16>>(
-            large_size);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 16>>(large_size);
 
         st::internal::spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(odd_size);
@@ -457,8 +450,8 @@ TEST(TestSpatialTree, IteratorCoverage) {
                 ASSERT_EQ(tree.size(), test_size);
                 ASSERT_EQ(std::distance(tree.begin(), tree.end()), test_size);
             };
-            CoordT                           boundary = test_size;
-            const st::bounding_box<CoordT> bounds({-boundary, -boundary, boundary, boundary});
+            CoordT                         boundary = test_size;
+            const st::bounding_box<CoordT> bounds = {-boundary, -boundary, boundary, boundary};
 
             st::internal::spatial_tree<int, CoordT, 2> bounded(bounds);
             inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2>>(bounded);
@@ -475,8 +468,7 @@ TEST(TestSpatialTree, IteratorCoverage) {
                 large_size);
 
             st::internal::spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(
-                odd_size);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(odd_size);
         }
     };
 
@@ -501,8 +493,8 @@ TEST(TestSpatialTree, SingleFind) {
                     ASSERT_NE(tree.find({CoordT(i), CoordT(i)}), tree.end());
                 }
             };
-            CoordT                           boundary = test_size;
-            const st::bounding_box<CoordT> bounds({-boundary, -boundary, boundary, boundary});
+            CoordT                         boundary = test_size;
+            const st::bounding_box<CoordT> bounds = {-boundary, -boundary, boundary, boundary};
 
             st::internal::spatial_tree<int, CoordT, 2> bounded(bounds);
             inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2>>(bounded);
@@ -519,8 +511,7 @@ TEST(TestSpatialTree, SingleFind) {
                 large_size);
 
             st::internal::spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(
-                odd_size);
+            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(odd_size);
         }
     };
 
@@ -562,7 +553,7 @@ TEST(TestSpatialTree, BBoxFind) {
                     const CoordT x_stop = distribution_stop_x(device);
                     const CoordT y_stop = distribution_stop_y(device);
 
-                    const st::bounding_box<CoordT, 2> bbox({x_start, y_start, x_stop, y_stop});
+                    const st::bounding_box<CoordT, 2> bbox = {x_start, y_start, x_stop, y_stop};
 
                     int counter = std::count_if(tree.begin(), tree.end(), [&](auto it) {
                         const auto [coordinates, val] = it;
@@ -576,8 +567,8 @@ TEST(TestSpatialTree, BBoxFind) {
                 }
             }
         };
-        const st::bounding_box<CoordT, 2> bounds(
-            {DISTRIBUTION_BEG, DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END});
+        const st::bounding_box<CoordT, 2> bounds = {
+            DISTRIBUTION_BEG, DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END};
 
         st::internal::spatial_tree<int, CoordT, 2> bounded(bounds);
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2>>(bounded);
@@ -589,8 +580,7 @@ TEST(TestSpatialTree, BBoxFind) {
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 1>>(small_size);
 
         st::internal::spatial_tree<int, CoordT, 2, 16> large_size(bounds);
-        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 16>>(
-            large_size);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 16>>(large_size);
 
         st::internal::spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(odd_size);
@@ -646,8 +636,8 @@ TEST(TestSpatialTree, Nearest) {
                 }
             }
         };
-        const st::bounding_box<CoordT, 2> bounds(
-            {DISTRIBUTION_BEG, DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END});
+        const st::bounding_box<CoordT, 2> bounds = {
+            DISTRIBUTION_BEG, DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END};
 
         st::internal::spatial_tree<int, CoordT, 2> bounded(bounds);
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2>>(bounded);
@@ -659,8 +649,7 @@ TEST(TestSpatialTree, Nearest) {
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 1>>(small_size);
 
         st::internal::spatial_tree<int, CoordT, 2, 16> large_size(bounds);
-        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 16>>(
-            large_size);
+        inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 16>>(large_size);
 
         st::internal::spatial_tree<int, CoordT, 2, 7> odd_size(bounds);
         inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 7>>(odd_size);
