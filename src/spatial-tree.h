@@ -117,8 +117,8 @@ inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
 
 template <typename AbsDiff, typename T, uint64_t rank>
 inline T euclidean_distance_squared_arr_impl(AbsDiff             absdiff,
-                                                    std::array<T, rank> lhs,
-                                                    std::array<T, rank> rhs) {
+                                             std::array<T, rank> lhs,
+                                             std::array<T, rank> rhs) {
     T sum = 0;
     unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
         const T dx = absdiff(lhs[i], rhs[i]);
@@ -152,9 +152,9 @@ inline bool is_within_interval(CoordinateType x, CoordinateType beg, CoordinateT
 
 template <typename CoordinateType, bool strict = false>
 inline bool intervals_overlap(CoordinateType lhs_beg,
-                                     CoordinateType lhs_end,
-                                     CoordinateType rhs_beg,
-                                     CoordinateType rhs_end) {
+                              CoordinateType lhs_end,
+                              CoordinateType rhs_beg,
+                              CoordinateType rhs_end) {
     assert(lhs_beg <= lhs_end);
     assert(rhs_beg <= rhs_end);
 
@@ -171,6 +171,8 @@ inline bool intervals_overlap(CoordinateType lhs_beg,
 template <typename CoordinateType, uint64_t rank = 2>
 struct bounding_box {
     static_assert(rank > 0 && rank <= sizeof(uint64_t) * 8);
+
+    static constexpr uint64_t BRANCHING_FACTOR = internal::pow(2, rank);
 
     std::array<CoordinateType, rank> starts;
     std::array<CoordinateType, rank> stops;
@@ -285,7 +287,7 @@ struct bounding_box {
     }
 
     inline bounding_box<CoordinateType, rank> qrecurse(uint64_t quad) const {
-        assert(quad < internal::pow(2, rank));
+        assert(quad < BRANCHING_FACTOR);
 
         std::array<CoordinateType, rank * 2> boundary;
         internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
@@ -329,6 +331,8 @@ public:
                   "Rank must be greater than 0 and less than 64");
     static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
 
+    static constexpr uint64_t BRANCHING_FACTOR = internal::pow(2, rank);
+
     spatial_tree() { clear(); }
     spatial_tree(const bounding_box<CoordinateType, rank> &boundary) : boundary_(boundary) {
         clear();
@@ -337,8 +341,12 @@ public:
 
     ~spatial_tree() = default;
 
-    inline void     reserve(uint64_t capacity) { nodes_.reserve(4 * capacity / MAXIMUM_NODE_SIZE); }
-    inline uint64_t capacity() const { return nodes_.capacity() / 4 * MAXIMUM_NODE_SIZE; }
+    inline void reserve(uint64_t capacity) {
+        nodes_.reserve(BRANCHING_FACTOR * capacity / MAXIMUM_NODE_SIZE);
+    }
+    inline uint64_t capacity() const {
+        return nodes_.capacity() / BRANCHING_FACTOR * MAXIMUM_NODE_SIZE;
+    }
     inline uint64_t size() const {
         assert(nodes_.size());
         const auto &root = nodes_.front();
@@ -366,7 +374,7 @@ public:
                     return;
                 }
 
-                for (uint64_t child = 0; child < internal::pow(2, rank); ++child) {
+                for (uint64_t child = 0; child < BRANCHING_FACTOR; ++child) {
                     const uint64_t child_index = node.branch.index_of_first_child + child;
                     const auto     new_boundary = boundary.qrecurse(child);
                     walk_recursively(child_index, new_boundary);
@@ -665,7 +673,7 @@ private:
             freed_nodes_.pop_back();
         } else {
             new_index_of_first_child = nodes_.size();
-            nodes_.resize(nodes_.size() + internal::pow(2, rank));
+            nodes_.resize(nodes_.size() + BRANCHING_FACTOR);
         }
 
         // nodes_.resize may have reallocated.
@@ -762,7 +770,7 @@ private:
         /// EXPLANATION: Not doing it at the root because of the union.
         uint64_t index_of_first_child = node.branch.index_of_first_child;
         node.reset();
-        static constexpr uint64_t N_CHILDREN = internal::pow(2, rank);
+        static constexpr uint64_t N_CHILDREN = BRANCHING_FACTOR;
         internal::unroll_for<N_CHILDREN>(uint64_t(0), N_CHILDREN, [&](auto quad) {
             recursively_gather_points(index_of_first_child + quad, node.leaf);
         });
@@ -809,7 +817,7 @@ private:
             return;
         }
 
-        static constexpr uint64_t N_CHILDREN = internal::pow(2, rank);
+        static constexpr uint64_t N_CHILDREN = BRANCHING_FACTOR;
         internal::unroll_for<N_CHILDREN>(uint64_t(0), N_CHILDREN, [&](auto quad) {
             auto new_boundary = boundary.qrecurse(quad);
             if (bbox.overlaps(new_boundary)) {
@@ -842,9 +850,8 @@ private:
             return;
         }
 
-        static constexpr uint64_t                            N_CHILDREN = internal::pow(2, rank);
-        std::array<bounding_box<CoordinateType>, N_CHILDREN> new_boundaries;
-        internal::unroll_for<N_CHILDREN>(uint64_t(0), N_CHILDREN, [&](auto quad) {
+        std::array<bounding_box<CoordinateType>, BRANCHING_FACTOR> new_boundaries;
+        internal::unroll_for<BRANCHING_FACTOR>(uint64_t(0), BRANCHING_FACTOR, [&](auto quad) {
             new_boundaries[quad] = boundary.qrecurse(quad);
         });
 
@@ -855,8 +862,8 @@ private:
                             nearest_distance_squared,
                             results);
 
-        internal::unroll_for<N_CHILDREN - 1>(uint64_t(1), N_CHILDREN, [&](auto i) {
-            uint64_t quad = (i + selected_quad) % N_CHILDREN;
+        internal::unroll_for<BRANCHING_FACTOR - 1>(uint64_t(1), BRANCHING_FACTOR, [&](auto i) {
+            uint64_t quad = (i + selected_quad) % BRANCHING_FACTOR;
             if (new_boundaries[quad].sdistance(point) <= nearest_distance_squared) {
                 nearest_recursively(node.branch.index_of_first_child + quad,
                                     new_boundaries[quad],
