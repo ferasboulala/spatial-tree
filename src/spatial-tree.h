@@ -503,6 +503,8 @@ private:
         std::array<CoordinateType, rank> coordinates;
         StorageType                      storage;
 
+        inline tree_node_with_storage() = default;
+
         template <typename... Args>
         inline tree_node_with_storage(std::array<CoordinateType, rank> coords, Args &&...args)
             : coordinates(coords), storage(std::forward<Args>(args)...) {}
@@ -510,13 +512,24 @@ private:
 
     struct tree_node_no_storage {
         std::array<CoordinateType, rank> coordinates;
+
+        inline tree_node_no_storage() = default;
+
         inline tree_node_no_storage(std::array<CoordinateType, rank> coords)
             : coordinates(coords) {}
     };
 
-    struct tree_node_storage : std::conditional<std::is_void_v<StorageType>,
+    using tree_node_storage_impl = std::conditional<std::is_void_v<StorageType>,
                                                 tree_node_no_storage,
-                                                tree_node_with_storage>::type {};
+                                                tree_node_with_storage>;
+
+    struct tree_node_storage : tree_node_storage_impl::type {
+        inline tree_node_storage() {
+            if constexpr (!std::is_void_v<StorageType>) {
+                this->coordinates = {};
+            }
+        }
+    };
 
     struct tree_node_leaf {
         std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
@@ -536,7 +549,8 @@ private:
             size = other.size;
         }
 
-        inline tree_node_leaf() = default;
+        inline tree_node_leaf() : items{} { size = 0; }
+
         inline ~tree_node_leaf() {
             for (uint64_t i = 0; i < size; ++i) {
                 items[i].~tree_node_storage();
@@ -577,7 +591,10 @@ private:
         inline bool is_a_branch() const { return is_branch; }
         inline bool is_a_leaf() const { return !is_a_branch(); }
         inline void reset() {
-            leaf.size = 0;
+            if (is_a_leaf()) {
+                leaf.~tree_node_leaf();
+            }
+            leaf = tree_node_leaf();
             is_branch = false;
         }
     };
