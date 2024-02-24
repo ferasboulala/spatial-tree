@@ -357,8 +357,8 @@ public:
     }
     inline bool empty() const { return size() == 0; }
     inline void clear() {
+        nodes_.clear();
         nodes_.resize(1);
-        nodes_.front().reset();
         freed_nodes_.clear();
     }
 
@@ -503,61 +503,66 @@ private:
         std::array<CoordinateType, rank> coordinates;
         StorageType                      storage;
 
-        inline tree_node_with_storage() = default;
+        inline tree_node_with_storage() noexcept = default;
 
         template <typename... Args>
-        inline tree_node_with_storage(std::array<CoordinateType, rank> coords, Args &&...args)
+        inline tree_node_with_storage(std::array<CoordinateType, rank> coords,
+                                      Args &&...args) noexcept
             : coordinates(coords), storage(std::forward<Args>(args)...) {}
     };
 
-    struct tree_node_no_storage {
+    struct tree_node_without_storage {
         std::array<CoordinateType, rank> coordinates;
 
-        inline tree_node_no_storage() = default;
+        inline tree_node_without_storage() noexcept = default;
 
-        inline tree_node_no_storage(std::array<CoordinateType, rank> coords)
+        template <typename... Args>
+        inline tree_node_without_storage(std::array<CoordinateType, rank> coords,
+                                         Args &&...) noexcept
             : coordinates(coords) {}
     };
 
-    using tree_node_storage_impl = std::conditional<std::is_void_v<StorageType>,
-                                                tree_node_no_storage,
-                                                tree_node_with_storage>;
-
-    struct tree_node_storage : tree_node_storage_impl::type {
-        inline tree_node_storage() {
-            if constexpr (!std::is_void_v<StorageType>) {
-                this->coordinates = {};
-            }
-        }
-    };
+    using tree_node_storage_impl = std::
+        conditional<std::is_void_v<StorageType>, tree_node_without_storage, tree_node_with_storage>;
+    struct tree_node_storage : tree_node_storage_impl::type {};
 
     struct tree_node_leaf {
-        std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
-        uint8_t                                          size;
+        tree_node_storage *items;
+        uint8_t            size;
 
-        inline tree_node_leaf(const tree_node_leaf &other) {
-            for (uint64_t i = 0; i < size; ++i) {
+        inline tree_node_leaf() noexcept {
+            items = (tree_node_storage *)malloc(sizeof(tree_node_storage) * MAXIMUM_NODE_SIZE);
+            size = 0;
+        }
+        inline tree_node_leaf(const tree_node_leaf &other) noexcept : tree_node_leaf() {
+            *this = other;
+        }
+        inline tree_node_leaf(tree_node_leaf &&other) noexcept { *this = std::move(other); }
+
+        inline tree_node_leaf &operator=(tree_node_leaf &&other) noexcept {
+            items = other.items;
+            size = other.size;
+            other.items = nullptr;
+
+            return *this;
+        }
+
+        inline tree_node_leaf &operator=(const tree_node_leaf &other) noexcept {
+            size = other.size;
+            for (uint8_t i = 0; i < size; ++i) {
                 items[i] = other.items[i];
             }
-            size = other.size;
+
+            return *this;
         }
 
-        inline tree_node_leaf(tree_node_leaf &&other) {
-            for (uint64_t i = 0; i < size; ++i) {
-                items[i] = std::move(other.items[i]);
-            }
-            size = other.size;
-        }
-
-        inline tree_node_leaf() : items{} { size = 0; }
-
-        inline ~tree_node_leaf() {
-            for (uint64_t i = 0; i < size; ++i) {
+        inline ~tree_node_leaf() noexcept {
+            for (uint8_t i = 0; i < size; ++i) {
                 items[i].~tree_node_storage();
             }
+            free(items);
+            items = nullptr;
         }
-
-        inline tree_node_leaf &operator=(tree_node_leaf &&) = default;
     };
 
     struct tree_node_branch {
@@ -575,28 +580,40 @@ private:
         };
         bool is_branch;
 
-        inline tree_node() { reset(); }
-        inline tree_node(tree_node &&other) : is_branch(other.is_branch) {
+        inline tree_node() noexcept : leaf(), is_branch(false) {}
+        inline tree_node(tree_node &&other) noexcept { *this = std::move(other); }
+        inline tree_node(const tree_node &other) noexcept { *this = other; }
+
+        inline tree_node &operator=(tree_node &&other) noexcept {
+            is_branch = other.is_branch;
             if (is_a_branch()) {
                 branch = std::move(other.branch);
             } else {
                 leaf = std::move(other.leaf);
             }
+
+            return *this;
         }
-        inline ~tree_node() {
+
+        inline tree_node &operator=(const tree_node &other) noexcept {
+            is_branch = other.is_branch;
+            if (is_a_branch()) {
+                branch = other.branch;
+            } else {
+                leaf = other.leaf;
+            }
+
+            return *this;
+        }
+
+        inline ~tree_node() noexcept {
             if (is_a_leaf()) {
                 leaf.~tree_node_leaf();
             }
         }
+
         inline bool is_a_branch() const { return is_branch; }
         inline bool is_a_leaf() const { return !is_a_branch(); }
-        inline void reset() {
-            if (is_a_leaf()) {
-                leaf.~tree_node_leaf();
-            }
-            leaf = tree_node_leaf();
-            is_branch = false;
-        }
     };
 
     inline auto operator()(uint64_t node_index, uint64_t item_index) const {
@@ -687,11 +704,13 @@ private:
         uint64_t new_index_of_first_child;
         if (freed_nodes_.size()) {
             new_index_of_first_child = freed_nodes_.back();
+            assert(nodes_[new_index_of_first_child].is_a_leaf());
             freed_nodes_.pop_back();
         } else {
             new_index_of_first_child = nodes_.size();
             nodes_.resize(nodes_.size() + BRANCHING_FACTOR);
         }
+        assert((new_index_of_first_child - 1) % BRANCHING_FACTOR == 0);
 
         // nodes_.resize may have reallocated.
         tree_node &node_as_branch = nodes_[node_index];
@@ -706,10 +725,10 @@ private:
                                            node_as_branch.leaf.items[i].storage);
             }
         });
-
-        node_as_branch.is_branch = true;
+        node_as_branch.~tree_node();
         node_as_branch.branch.index_of_first_child = new_index_of_first_child;
         node_as_branch.branch.size = MAXIMUM_NODE_SIZE + 1;
+        node_as_branch.is_branch = true;
 
         const auto ret = emplace_recursively_helper(
             new_index_of_first_child, boundary, point, std::forward<Args>(args)...);
@@ -727,7 +746,7 @@ private:
                 leaf.items[leaf.size++] = std::move(node.leaf.items[i]);
             }
             assert(leaf.size <= MAXIMUM_NODE_SIZE);
-            node.reset();
+            node.leaf.size = 0;
             return;
         }
 
@@ -738,7 +757,7 @@ private:
         }
 
         freed_nodes_.push_back(node.branch.index_of_first_child);
-        node.reset();
+        node = tree_node();
     }
 
     inline bool erase_recursively(uint64_t                            node_index,
@@ -786,7 +805,7 @@ private:
         // TODO: Specify that it is safe to access &node because there was no realloc.
         /// EXPLANATION: Not doing it at the root because of the union.
         uint64_t index_of_first_child = node.branch.index_of_first_child;
-        node.reset();
+        node = tree_node();
         static constexpr uint64_t N_CHILDREN = BRANCHING_FACTOR;
         internal::unroll_for<N_CHILDREN>(uint64_t(0), N_CHILDREN, [&](auto quad) {
             recursively_gather_points(index_of_first_child + quad, node.leaf);

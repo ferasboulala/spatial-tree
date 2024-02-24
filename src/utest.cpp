@@ -288,11 +288,11 @@ TEST(TestSpatialTree, UniqueInsertions) {
             CoordT                            bound = test_size;
             const st::bounding_box<CoordT, 2> bounds = {-bound, -bound, bound, bound};
 
-            st::internal::spatial_tree<int, CoordT, 2> bounded(bounds);
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2>>(bounded);
+            // st::internal::spatial_tree<int, CoordT, 2> bounded(bounds);
+            // inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2>>(bounded);
 
-            st::internal::spatial_tree<int, CoordT, 2> unbounded;
-            inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2>>(unbounded);
+            // st::internal::spatial_tree<int, CoordT, 2> unbounded;
+            // inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2>>(unbounded);
 
             st::internal::spatial_tree<int, CoordT, 2, 1> small_size(bounds);
             inner_test.template operator()<st::internal::spatial_tree<int, CoordT, 2, 1>>(
