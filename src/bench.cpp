@@ -15,10 +15,10 @@ static constexpr uint64_t LOW = 1 << 10;
 static constexpr uint64_t HIGH = 1 << 22;
 
 struct opaque_data {
-    char opaque[1];
+    char opaque[sizeof(void*)];
     opaque_data() {}
 };
-static constexpr uint64_t MAX_NODE_SIZE = 128;
+static constexpr uint64_t MAX_NODE_SIZE = 256;
 
 template <typename CoordT>
 std::vector<std::pair<CoordT, CoordT>> generate_points(CoordT BEG, CoordT END, uint64_t test_size) {

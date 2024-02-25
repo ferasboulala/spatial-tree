@@ -30,7 +30,8 @@
 
 // clang-format off
 
-// Copy pasted from: https://github.com/martinus/robin-hood-hashing
+// Copy pasted from: https://github.com/martinus/robin-hood-hashing with some slight modifications
+// in robin_hood::pair to allow void values.
 //                 ______  _____                 ______                _________
 //  ______________ ___  /_ ___(_)_______         ___  /_ ______ ______ ______  /
 //  __  ___/_  __ \__  __ \__  / __  __ \        __  __ \_  __ \_  __ \_  __  /
@@ -2922,7 +2923,40 @@ private:
 
     struct storage_container_empty {};
     struct storage_container_full {
-        std::vector<StorageType> vec;
+        struct storage_data {
+            union {
+                StorageType data;
+            };
+            bool enabled;
+
+            inline storage_data(StorageType&& d) noexcept : data(std::move(d)), enabled(true) {}
+            template <typename... Args>
+            inline storage_data(Args&&... args) noexcept
+                : data(std::forward<Args>(args)...), enabled(true) {}
+            inline storage_data(const storage_data& other) { *this = other; }
+            inline storage_data(storage_data&& other) noexcept { *this = std::move(other); }
+            inline storage_data& operator=(storage_data&& other) noexcept {
+                enabled = other.enabled;
+                if (enabled) {
+                    data = std::move(other.data);
+                }
+                return *this;
+            }
+            inline storage_data& operator=(const storage_data& other) noexcept {
+                enabled = other.enabled;
+                if (enabled) {
+                    data = other.data;
+                }
+                return *this;
+            }
+            inline ~storage_data() noexcept {
+                if (enabled) {
+                    data.~StorageType();
+                    enabled = false;
+                }
+            }
+        };
+        std::vector<storage_data> vec;
     };
     struct storage_container : std::conditional<std::is_void_v<StorageType>,
                                                 storage_container_empty,
@@ -2934,7 +2968,7 @@ private:
                                   internal::point_hash<CoordinateType, Rank>,
                                   internal::point_equal<CoordinateType, Rank>>,
         robin_hood::unordered_map<std::array<CoordinateType, Rank>,
-                                  StorageType,
+                                  uint64_t,
                                   internal::point_hash<CoordinateType, Rank>,
                                   internal::point_equal<CoordinateType, Rank>>>::type;
 
@@ -3016,7 +3050,7 @@ public:
             return {it, inserted};
         } else {
             auto [it, inserted] = presence_.emplace(point, storage_.vec.size());
-            auto [_, idx] = *it;
+            auto& [_, idx] = *it;
 
             if (!inserted) {
                 return {it, false};
@@ -3025,9 +3059,8 @@ public:
             if (pool_.vec.empty()) {
                 storage_.vec.emplace_back(std::forward<Args>(args)...);
             } else {
-                // FIXME: This will probably call the destructor.
-                storage_.vec[pool_.vec.back()] =
-                    std::move(StorageType(std::forward<Args>(args)...));
+                idx = pool_.vec.back();
+                storage_.vec[idx] = std::move(StorageType(std::forward<Args>(args)...));
                 pool_.vec.pop_back();
             }
 
@@ -3047,15 +3080,17 @@ public:
 
         if constexpr (std::is_void_v<StorageType>) {
             presence_.erase(it);
+            erase_recursively(0, boundary_, std::numeric_limits<uint64_t>::max(), point);
+
             return true;
         } else {
             auto [_, idx] = *it;
             presence_.erase(it);
 
-            storage_.vec[idx].~StorageType();
+            storage_.vec[idx].~storage_data();
             pool_.vec.push_back(idx);
 
-            erase_recursively(0, boundary_, size(), point);
+            erase_recursively(0, boundary_, std::numeric_limits<uint64_t>::max(), point);
 
             return true;
         }
@@ -3222,13 +3257,13 @@ private:
                 leaf.items[leaf.size++] = node.leaf.items[i];
             }
             assert(leaf.size <= MaximumNodeSize);
-            node.leaf.size = 0;
+            node = tree_node();
             return;
         }
 
         // TODO: Specify that it is safe to access &node because there was no realloc.
         // TODO: Do it elsewhere too.
-        for (uint64_t quad = 0; quad < 4; ++quad) {
+        for (uint64_t quad = 0; quad < BranchingFactor; ++quad) {
             recursively_gather_points(node.branch.index_of_first_child + quad, leaf);
         }
 
@@ -3246,30 +3281,25 @@ private:
         if (node.is_a_leaf()) {
             for (uint16_t i = 0; i < node.leaf.size; ++i) {
                 if (internal::equal<CoordinateType, Rank>(point, node.leaf.items[i].coordinates)) {
-                    uint64_t last_index = node.leaf.size - 1;
-                    if (last_index != i) {
-                        node.leaf.items[i] = node.leaf.items[last_index];
-                    }
-                    --node.leaf.size;
-
+                    node.leaf.items[i] = node.leaf.items[--node.leaf.size];
                     return;
                 }
             }
             assert(false && "Unreachable");
         }
 
-        uint64_t size_after_removal = node.branch.size - 1;
         const auto [new_boundary, selected_quad] = boundary.recurse(point);
         erase_recursively(node.branch.index_of_first_child + selected_quad,
                           new_boundary,
-                          size_after_removal,
+                          --node.branch.size,
                           point);
 
+        // If the parent node will fold, no need to fold here too.
         if (parent_size_after_removal <= MaximumNodeSize) {
             return;
         }
 
-        if (--node.branch.size > MaximumNodeSize) {
+        if (node.branch.size > MaximumNodeSize) {
             return;
         }
 
@@ -3299,7 +3329,7 @@ private:
                         func(ConstOrNot(node.leaf.items[i].coordinates));
                     } else {
                         func(ConstOrNot(node.leaf.items[i].coordinates,
-                                        storage_.vec[node.leaf.items[i].index]));
+                                        storage_.vec[node.leaf.items[i].index].data));
                     }
                 }
             }
@@ -3336,14 +3366,14 @@ private:
                         results.push_back(ConstOrNot(node.leaf.items[i].coordinates));
                     } else {
                         results.push_back(ConstOrNot(node.leaf.items[i].coordinates,
-                                                     storage_.vec[node.leaf.items[i].index]));
+                                                     storage_.vec[node.leaf.items[i].index].data));
                     }
                 } else if (distance == nearest_distance_squared) {
                     if constexpr (std::is_void_v<StorageType>) {
                         results.push_back(ConstOrNot(node.leaf.items[i].coordinates));
                     } else {
                         results.push_back(ConstOrNot(node.leaf.items[i].coordinates,
-                                                     storage_.vec[node.leaf.items[i].index]));
+                                                     storage_.vec[node.leaf.items[i].index].data));
                     }
                 }
             }
