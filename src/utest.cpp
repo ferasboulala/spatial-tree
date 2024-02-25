@@ -262,10 +262,10 @@ TEST(TestSpatialTree, ManyValueTypes) {
 TEST(TestSpatialTree, MutableAccesses) {
     st::internal::spatial_tree<int, int, 2> tree;
     auto                                    it = tree.emplace({0, 0}, 0).first;
-    auto [coordinates, data1] = *it;
+    auto &[coordinates, data1] = *it;
     ++data1;
-    it = tree.find({0, 0});
-    auto [_, data2] = *it;
+    auto it2 = tree.find({0, 0});
+    auto &[_, data2] = *it2;
     ASSERT_EQ(data2, 1);
 }
 
