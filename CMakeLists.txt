@@ -5,7 +5,7 @@ project(spatial-tree)
 # Do not use -ffast-math because it will break floating point correctness. Use it only if coordinate types are integers.
 add_compile_options(-O3 -march=native -Wall -Wextra -fverbose-asm -save-temps)
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(ALL_LIBRARIES)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../bin/")
