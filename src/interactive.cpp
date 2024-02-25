@@ -22,14 +22,13 @@ void mouse_callback(int event, int x, int y, int, void *) {
     static constexpr int min_distance_squared = POINT_RADIUS * POINT_RADIUS;
     int                  distance_squared = std::numeric_limits<int>::max();
     if (!res.empty()) {
-        auto [y_, x_] = *res.front();
+        auto [y_, x_] = res.front();
         distance_squared = st::internal::euclidean_distance_squared(x, x_, y, y_);
     }
 
     if (distance_squared <= min_distance_squared) {
-        for (auto it : res) {
-            auto [y_, x_] = *it;
-            points->erase({y_, x_});
+        for (auto pt : res) {
+            points->erase(pt);
         }
     } else {
         points->emplace({y, x});

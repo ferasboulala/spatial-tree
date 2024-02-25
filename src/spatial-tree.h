@@ -58,11 +58,11 @@ inline void hash_combine(std::size_t &seed, const T &v) {
     seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
-template <typename CoordinateType, uint64_t rank>
+template <typename CoordinateType, uint64_t Rank>
 struct point_hash {
-    inline size_t operator()(const std::array<CoordinateType, rank> &key) const {
+    inline size_t operator()(const std::array<CoordinateType, Rank> &key) const {
         size_t hash = 0x778abe;
-        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) { hash_combine(hash, key[i]); });
+        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) { hash_combine(hash, key[i]); });
         return hash;
     }
 };
@@ -76,25 +76,25 @@ inline constexpr T pow(T base, uint64_t exponent) {
     return base;
 }
 
-template <typename CoordinateType, uint64_t rank>
-inline bool equal(std::array<CoordinateType, rank> lhs, std::array<CoordinateType, rank> rhs) {
+template <typename CoordinateType, uint64_t Rank>
+inline bool equal(std::array<CoordinateType, Rank> lhs, std::array<CoordinateType, Rank> rhs) {
     bool same = true;
-    unroll_for<rank>(uint64_t(0), rank, [&](auto i) { same &= (lhs[i] == rhs[i]); });
+    unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) { same &= (lhs[i] == rhs[i]); });
 
     return same;
 }
 
-template <typename CoordinateType, uint64_t rank>
+template <typename CoordinateType, uint64_t Rank>
 struct point_equal {
-    inline size_t operator()(std::array<CoordinateType, rank> lhs,
-                             std::array<CoordinateType, rank> rhs) const {
-        return equal<CoordinateType, rank>(lhs, rhs);
+    inline size_t operator()(std::array<CoordinateType, Rank> lhs,
+                             std::array<CoordinateType, Rank> rhs) const {
+        return equal<CoordinateType, Rank>(lhs, rhs);
     }
 };
 
-template <typename CoordinateType, uint64_t rank>
-inline void set(std::array<CoordinateType, rank> &dst, std::array<CoordinateType, rank> src) {
-    unroll_for<rank>(uint64_t(0), rank, [&](auto i) { dst[i] = src[i]; });
+template <typename CoordinateType, uint64_t Rank>
+inline void set(std::array<CoordinateType, Rank> &dst, std::array<CoordinateType, Rank> src) {
+    unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) { dst[i] = src[i]; });
 }
 
 template <typename AbsDiff, typename T, typename... Args>
@@ -143,12 +143,12 @@ inline T euclidean_distance_squared(T x1, T x2, Args... xs) {
     }
 }
 
-template <typename AbsDiff, typename T, uint64_t rank>
+template <typename AbsDiff, typename T, uint64_t Rank>
 inline T euclidean_distance_squared_arr_impl(AbsDiff             absdiff,
-                                             std::array<T, rank> lhs,
-                                             std::array<T, rank> rhs) {
+                                             std::array<T, Rank> lhs,
+                                             std::array<T, Rank> rhs) {
     T sum = 0;
-    unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+    unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
         const T dx = absdiff(lhs[i], rhs[i]);
         sum += dx * dx;
     });
@@ -156,13 +156,13 @@ inline T euclidean_distance_squared_arr_impl(AbsDiff             absdiff,
     return sum;
 }
 
-template <typename T, uint64_t rank>
-inline T euclidean_distance_squared_arr(std::array<T, rank> lhs, std::array<T, rank> rhs) {
+template <typename T, uint64_t Rank>
+inline T euclidean_distance_squared_arr(std::array<T, Rank> lhs, std::array<T, Rank> rhs) {
     if constexpr (std::is_floating_point_v<T> || std::is_signed_v<T>) {
-        return euclidean_distance_squared_arr_impl<UnsafeAbsDiff<T>, T, rank>(
+        return euclidean_distance_squared_arr_impl<UnsafeAbsDiff<T>, T, Rank>(
             UnsafeAbsDiff<T>(), lhs, rhs);
     } else {
-        return euclidean_distance_squared_arr_impl<SafeAbsDiff<T>, T, rank>(
+        return euclidean_distance_squared_arr_impl<SafeAbsDiff<T>, T, Rank>(
             SafeAbsDiff<T>(), lhs, rhs);
     }
 }
@@ -196,58 +196,58 @@ inline bool intervals_overlap(CoordinateType lhs_beg,
 }  // namespace internal
 
 // When replacing the other bounding_box, be sure to check operand order.
-template <typename CoordinateType, uint64_t rank = 2>
+template <typename CoordinateType, uint64_t Rank = 2>
 struct bounding_box {
-    static_assert(rank > 0 && rank <= sizeof(uint64_t) * 8);
+    static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8);
 
-    static constexpr uint64_t BRANCHING_FACTOR = internal::pow(2, rank);
+    static constexpr uint64_t BranchingFactor = internal::pow(2, Rank);
 
-    std::array<CoordinateType, rank> starts;
-    std::array<CoordinateType, rank> stops;
+    std::array<CoordinateType, Rank> starts;
+    std::array<CoordinateType, Rank> stops;
 
     inline bounding_box() {
         starts.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
         stops.fill(std::numeric_limits<CoordinateType>::max() / 2);
     }
 
-    inline bounding_box(std::array<CoordinateType, rank * 2> boundary) {
-        internal::unroll_for<rank>(uint64_t(0), rank, [&](uint64_t i) {
+    inline bounding_box(std::array<CoordinateType, Rank * 2> boundary) {
+        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](uint64_t i) {
             assert(boundary[i] >= std::numeric_limits<CoordinateType>::lowest() / 2);
-            assert(boundary[i + rank] <= std::numeric_limits<CoordinateType>::max() / 2);
+            assert(boundary[i + Rank] <= std::numeric_limits<CoordinateType>::max() / 2);
 
             starts[i] = boundary[i];
-            stops[i] = boundary[i + rank];
+            stops[i] = boundary[i + Rank];
         });
     }
 
     inline bounding_box(std::initializer_list<CoordinateType> boundary) {
-        assert(boundary.size() == 2 * rank);
-        internal::unroll_for<rank>(uint64_t(0), rank, [&](uint64_t i) {
+        assert(boundary.size() == 2 * Rank);
+        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](uint64_t i) {
             assert(*(boundary.begin() + i) >= std::numeric_limits<CoordinateType>::lowest() / 2);
-            assert(*(boundary.begin() + i + rank) <=
+            assert(*(boundary.begin() + i + Rank) <=
                    std::numeric_limits<CoordinateType>::max() / 2);
 
             starts[i] = *(boundary.begin() + i);
-            stops[i] = *(boundary.begin() + i + rank);
+            stops[i] = *(boundary.begin() + i + Rank);
         });
     }
 
-    inline bool operator==(const bounding_box<CoordinateType, rank> &other) const {
+    inline bool operator==(const bounding_box<CoordinateType, Rank> &other) const {
         return !std::memcmp(this, &other, sizeof(other));
     }
 
     inline CoordinateType area() const {
         CoordinateType area = 1;
-        internal::unroll_for<rank>(
-            uint64_t(0), rank, [&](auto i) { area *= stops[i] - starts[i]; });
+        internal::unroll_for<Rank>(
+            uint64_t(0), Rank, [&](auto i) { area *= stops[i] - starts[i]; });
 
         return area;
     }
 
     template <bool strict = false>
-    inline bool contains(std::array<CoordinateType, rank> point) const {
+    inline bool contains(std::array<CoordinateType, Rank> point) const {
         bool is_contained = true;
-        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
             is_contained &=
                 internal::is_within_interval<CoordinateType, strict>(point[i], starts[i], stops[i]);
         });
@@ -256,9 +256,9 @@ struct bounding_box {
     }
 
     template <bool strict = false>
-    inline bool overlaps(const bounding_box<CoordinateType, rank> &other) const {
+    inline bool overlaps(const bounding_box<CoordinateType, Rank> &other) const {
         bool is_overlapping = true;
-        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
             is_overlapping &= internal::intervals_overlap<CoordinateType, strict>(
                 starts[i], stops[i], other.starts[i], other.stops[i]);
         });
@@ -266,34 +266,34 @@ struct bounding_box {
         return is_overlapping;
     }
 
-    inline std::array<CoordinateType, rank> origin() const {
-        std::array<CoordinateType, rank> origins;
-        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+    inline std::array<CoordinateType, Rank> origin() const {
+        std::array<CoordinateType, Rank> origins;
+        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
             origins[i] = (stops[i] - starts[i]) / 2 + starts[i];
         });
 
         return origins;
     }
 
-    inline uint64_t quadrant(std::array<CoordinateType, rank> point) const {
+    inline uint64_t quadrant(std::array<CoordinateType, Rank> point) const {
         // Contract: lower region is ceiled, upper region is floored. (>)
         // Assumes the bbox is infinite.
         uint64_t   quadrant = 0;
         const auto origins = origin();
-        internal::unroll_for<rank>(
-            uint64_t(0), rank, [&](auto i) { quadrant |= (point[i] > origins[i]) << i; });
+        internal::unroll_for<Rank>(
+            uint64_t(0), Rank, [&](auto i) { quadrant |= (point[i] > origins[i]) << i; });
 
         return quadrant;
     }
 
-    inline std::tuple<bounding_box<CoordinateType, rank>, uint64_t> recurse(
-        std::array<CoordinateType, rank> point) const {
+    inline std::tuple<bounding_box<CoordinateType, Rank>, uint64_t> recurse(
+        std::array<CoordinateType, Rank> point) const {
         assert(contains(point));
 
         const auto                           origins = origin();
         uint64_t                             quad = 0;
-        std::array<CoordinateType, rank * 2> boundary;
-        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+        std::array<CoordinateType, Rank * 2> boundary;
+        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
             CoordinateType span = stops[i] - starts[i];
             CoordinateType new_span = span / 2;
             // Contract: lower region is ceiled, upper region is floored. (>)
@@ -302,42 +302,42 @@ struct bounding_box {
             // Faster than branchless.
             if (gt) {
                 boundary[i] = starts[i] + new_span;
-                boundary[i + rank] = stops[i];
+                boundary[i + Rank] = stops[i];
                 quad |= (1 << i);
             } else {
                 CoordinateType remainder = span - 2 * new_span;
                 boundary[i] = starts[i];
-                boundary[i + rank] = stops[i] - (new_span + remainder);
+                boundary[i + Rank] = stops[i] - (new_span + remainder);
             }
         });
 
-        return {bounding_box<CoordinateType, rank>(boundary), quad};
+        return {bounding_box<CoordinateType, Rank>(boundary), quad};
     }
 
-    inline bounding_box<CoordinateType, rank> qrecurse(uint64_t quad) const {
-        assert(quad < BRANCHING_FACTOR);
+    inline bounding_box<CoordinateType, Rank> qrecurse(uint64_t quad) const {
+        assert(quad < BranchingFactor);
 
-        std::array<CoordinateType, rank * 2> boundary;
-        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+        std::array<CoordinateType, Rank * 2> boundary;
+        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
             CoordinateType span = stops[i] - starts[i];
             CoordinateType new_span = span / 2;
             CoordinateType remainder = span - 2 * new_span;
 
             if (quad & (1 << i)) {
                 boundary[i] = starts[i] + new_span;
-                boundary[i + rank] = stops[i];
+                boundary[i + Rank] = stops[i];
             } else {
                 boundary[i] = starts[i];
-                boundary[i + rank] = stops[i] - (new_span + remainder);
+                boundary[i + Rank] = stops[i] - (new_span + remainder);
             }
         });
 
-        return bounding_box<CoordinateType, rank>(boundary);
+        return bounding_box<CoordinateType, Rank>(boundary);
     }
 
-    inline CoordinateType sdistance(std::array<CoordinateType, rank> point) const {
+    inline CoordinateType sdistance(std::array<CoordinateType, Rank> point) const {
         CoordinateType distance_squared = 0;
-        internal::unroll_for<rank>(uint64_t(0), rank, [&](auto i) {
+        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
             CoordinateType gt = (point[i] > stops[i]) * (point[i] - stops[i]);
             CoordinateType lt = (point[i] < starts[i]) * (starts[i] - point[i]);
             distance_squared += gt * gt + lt * lt;
@@ -351,15 +351,15 @@ namespace internal {
 
 template <typename StorageType = void,
           typename CoordinateType = int,
-          uint64_t rank = 2,
-          uint16_t MAXIMUM_NODE_SIZE = 64>
+          uint64_t Rank = 2,
+          uint16_t MaximumNodeSize = 64>
 class spatial_tree {
 private:
-    static_assert(rank > 0 && rank <= sizeof(uint64_t) * 8,
+    static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8,
                   "Rank must be greater than 0 and less than 64");
-    static_assert(MAXIMUM_NODE_SIZE > 0, "Maximum node size must be greater than 1");
+    static_assert(MaximumNodeSize > 0, "Maximum node size must be greater than 1");
 
-    static constexpr uint64_t BRANCHING_FACTOR = internal::pow(2, rank);
+    static constexpr uint64_t BranchingFactor = internal::pow(2, Rank);
 
     struct storage_pool_empty {};
     struct storage_pool_full {
@@ -376,22 +376,23 @@ private:
     struct storage_container : std::conditional<std::is_void_v<StorageType>,
                                                 storage_container_empty,
                                                 storage_container_full>::type {};
+
     using hash_table_type = typename std::conditional<
         std::is_void_v<StorageType>,
-        robin_hood::unordered_set<std::array<CoordinateType, rank>,
-                                  internal::point_hash<CoordinateType, rank>,
-                                  internal::point_equal<CoordinateType, rank>>,
-        std::unordered_map<std::array<CoordinateType, rank>,
-                           StorageType,
-                           internal::point_hash<CoordinateType, rank>,
-                           internal::point_equal<CoordinateType, rank>>>::type;
+        robin_hood::unordered_set<std::array<CoordinateType, Rank>,
+                                  internal::point_hash<CoordinateType, Rank>,
+                                  internal::point_equal<CoordinateType, Rank>>,
+        robin_hood::unordered_map<std::array<CoordinateType, Rank>,
+                                  StorageType,
+                                  internal::point_hash<CoordinateType, Rank>,
+                                  internal::point_equal<CoordinateType, Rank>>>::type;
 
     using iterator = hash_table_type::iterator;
     using const_iterator = hash_table_type::const_iterator;
 
 public:
     spatial_tree() { clear(); }
-    spatial_tree(const bounding_box<CoordinateType, rank> &boundary) : boundary_(boundary) {
+    spatial_tree(const bounding_box<CoordinateType, Rank> &boundary) : boundary_(boundary) {
         clear();
     }
     spatial_tree(std::initializer_list<CoordinateType> boundary) : boundary_(boundary) { clear(); }
@@ -399,14 +400,14 @@ public:
     ~spatial_tree() = default;
 
     inline void reserve(uint64_t capacity) {
-        nodes_.reserve(BRANCHING_FACTOR * capacity / MAXIMUM_NODE_SIZE);
+        nodes_.reserve(BranchingFactor * capacity / MaximumNodeSize);
         if constexpr (!std::is_void_v<StorageType>) {
             storage_.vec.reserve(capacity);
         }
         presence_.reserve(capacity);
     }
     inline uint64_t capacity() const {
-        return nodes_.capacity() / BRANCHING_FACTOR * MAXIMUM_NODE_SIZE;
+        return nodes_.capacity() / BranchingFactor * MaximumNodeSize;
     }
     inline uint64_t size() const { return presence_.size(); }
     inline bool     empty() const { return size() == 0; }
@@ -433,7 +434,7 @@ public:
                     return;
                 }
 
-                for (uint64_t child = 0; child < BRANCHING_FACTOR; ++child) {
+                for (uint64_t child = 0; child < BranchingFactor; ++child) {
                     const uint64_t child_index = node.branch.index_of_first_child + child;
                     const auto     new_boundary = boundary.qrecurse(child);
                     walk_recursively(child_index, new_boundary);
@@ -443,11 +444,13 @@ public:
         walk_recursively(0, boundary_);
     }
 
-    inline iterator begin() const { return presence_.begin(); }
-    inline iterator end() const { return presence_.end(); }
+    inline const_iterator begin() const { return presence_.begin(); }
+    inline const_iterator end() const { return presence_.end(); }
+    inline iterator       begin() { return presence_.begin(); }
+    inline iterator       end() { return presence_.end(); }
 
     template <typename... Args>
-    inline std::pair<iterator, bool> emplace(std::array<CoordinateType, rank> point,
+    inline std::pair<iterator, bool> emplace(std::array<CoordinateType, Rank> point,
                                              Args &&...args) {
         assert(boundary_.contains(point));
 
@@ -472,8 +475,9 @@ public:
                 storage_.vec.emplace_back(std::forward<Args>(args)...);
             } else {
                 // FIXME: This will probably call the destructor.
-                storage_.vec[pool_.back()] = std::move(StorageType(std::forward<Args>(args)...));
-                pool_.pop_back();
+                storage_.vec[pool_.vec.back()] =
+                    std::move(StorageType(std::forward<Args>(args)...));
+                pool_.vec.pop_back();
             }
 
             emplace_recursively(0, boundary_, point, idx);
@@ -482,7 +486,7 @@ public:
         }
     }
 
-    inline bool erase(std::array<CoordinateType, rank> point) {
+    inline bool erase(std::array<CoordinateType, Rank> point) {
         assert(boundary_.contains(point));
 
         auto it = presence_.find(point);
@@ -498,7 +502,7 @@ public:
             presence_.erase(it);
 
             storage_.vec[idx].~StorageType();
-            pool_.push_back(idx);
+            pool_.vec.push_back(idx);
 
             erase_recursively(0, boundary_, size(), point);
 
@@ -507,26 +511,73 @@ public:
     }
 
     template <typename Func>
-    inline void find(const bounding_box<CoordinateType> &bbox, Func func) const {
-        find_recursively(bbox, boundary_, func, 0);
+    inline void find(const bounding_box<CoordinateType> &bbox, Func func) {
+        if constexpr (std::is_void_v<StorageType>) {
+            find_recursively<Func, std::array<CoordinateType, Rank>>(bbox, boundary_, func, 0);
+        } else {
+            find_recursively<Func, std::pair<std::array<CoordinateType, Rank>, StorageType &>>(
+                bbox, boundary_, func, 0);
+        }
     }
 
-    inline const_iterator find(std::array<CoordinateType, rank> point) const {
+    template <typename Func>
+    inline void find(const bounding_box<CoordinateType> &bbox, Func func) const {
+        if constexpr (std::is_void_v<StorageType>) {
+            find_recursively<Func, std::array<CoordinateType, Rank>>(bbox, boundary_, func, 0);
+        } else {
+            find_recursively<Func,
+                             std::pair<std::array<CoordinateType, Rank>, const StorageType &>>(
+                bbox, boundary_, func, 0);
+        }
+    }
+
+    inline const_iterator find(std::array<CoordinateType, Rank> point) const {
         return presence_.find(point);
     }
+    inline iterator find(std::array<CoordinateType, Rank> point) { return presence_.find(point); }
 
-    std::vector<const_iterator> nearest(std::array<CoordinateType, rank> point) const {
+    auto nearest(std::array<CoordinateType, Rank> point) {
         CoordinateType nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
-        std::vector<const_iterator> results;
-        nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
+        if constexpr (std::is_void_v<StorageType>) {
+            std::vector<std::array<CoordinateType, Rank>> results;
+            nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
+            return results;
+        } else {
+            std::vector<std::pair<std::array<CoordinateType, Rank>, StorageType &>> results;
+            nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
+            return results;
+        }
+    }
 
-        return results;
+    auto nearest(std::array<CoordinateType, Rank> point) const {
+        CoordinateType nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
+        if constexpr (std::is_void_v<StorageType>) {
+            std::vector<std::array<CoordinateType, Rank>> results;
+            nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
+            return results;
+        } else {
+            std::vector<std::pair<std::array<CoordinateType, Rank>, const StorageType &>> results;
+            nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
+            return results;
+        }
     }
 
 private:
+    struct tree_node_empty {
+        std::array<CoordinateType, Rank> coordinates;
+    };
+
+    struct tree_node_full {
+        std::array<CoordinateType, Rank> coordinates;
+        uint64_t                         index;
+    };
+
+    struct tree_node_impl
+        : std::conditional<std::is_void_v<StorageType>, tree_node_empty, tree_node_full>::type {};
+
     struct tree_node_leaf {
-        std::array<std::array<CoordinateType, rank>, MAXIMUM_NODE_SIZE> items;
-        uint16_t                                                        size;
+        std::array<tree_node_impl, MaximumNodeSize> items;
+        uint16_t                                    size;
         tree_node_leaf() : size(0) {}
     };
 
@@ -553,26 +604,32 @@ private:
 
     inline void emplace_recursively_helper(uint64_t                            index_of_first_child,
                                            const bounding_box<CoordinateType> &boundary,
-                                           std::array<CoordinateType, rank>    point) {
+                                           std::array<CoordinateType, Rank>    point,
+                                           uint64_t                            index = -1) {
         const auto [new_boundary, selected_quad] = boundary.recurse(point);
-        emplace_recursively(index_of_first_child + selected_quad, new_boundary, point);
+        emplace_recursively(index_of_first_child + selected_quad, new_boundary, point, index);
     }
 
     void emplace_recursively(uint64_t                            node_index,
                              const bounding_box<CoordinateType> &boundary,
-                             std::array<CoordinateType, rank>    point) {
+                             std::array<CoordinateType, Rank>    point,
+                             uint64_t                            index = -1) {
         assert(node_index < nodes_.size());
         assert(boundary.contains(point));
 
         tree_node &node = nodes_[node_index];
         if (node.is_a_branch()) {
             ++node.branch.size;
-            emplace_recursively_helper(node.branch.index_of_first_child, boundary, point);
+            emplace_recursively_helper(node.branch.index_of_first_child, boundary, point, index);
             return;
         }
 
-        if (node.leaf.size < MAXIMUM_NODE_SIZE) {
-            internal::set<CoordinateType, rank>(node.leaf.items[node.leaf.size++], point);
+        if (node.leaf.size < MaximumNodeSize) {
+            internal::set<CoordinateType, Rank>(node.leaf.items[node.leaf.size].coordinates, point);
+            if constexpr (!std::is_void_v<StorageType>) {
+                node.leaf.items[node.leaf.size].index = index;
+            }
+            ++node.leaf.size;
             return;
         }
 
@@ -583,20 +640,27 @@ private:
             freed_nodes_.pop_back();
         } else {
             new_index_of_first_child = nodes_.size();
-            nodes_.resize(nodes_.size() + BRANCHING_FACTOR);
+            nodes_.resize(nodes_.size() + BranchingFactor);
         }
-        assert((new_index_of_first_child - 1) % BRANCHING_FACTOR == 0);
+        assert((new_index_of_first_child - 1) % BranchingFactor == 0);
 
         // nodes_.resize may have reallocated.
         tree_node &node_as_branch = nodes_[node_index];
-        internal::unroll_for<MAXIMUM_NODE_SIZE>(uint16_t(0), MAXIMUM_NODE_SIZE, [&](auto i) {
-            emplace_recursively_helper(
-                new_index_of_first_child, boundary, node_as_branch.leaf.items[i]);
+        internal::unroll_for<MaximumNodeSize>(uint16_t(0), MaximumNodeSize, [&](auto i) {
+            if constexpr (std::is_void_v<StorageType>) {
+                emplace_recursively_helper(
+                    new_index_of_first_child, boundary, node_as_branch.leaf.items[i].coordinates);
+            } else {
+                emplace_recursively_helper(new_index_of_first_child,
+                                           boundary,
+                                           node_as_branch.leaf.items[i].coordinates,
+                                           node_as_branch.leaf.items[i].index);
+            }
         });
         node_as_branch.branch.index_of_first_child = new_index_of_first_child;
-        node_as_branch.branch.size = MAXIMUM_NODE_SIZE + 1;
+        node_as_branch.branch.size = MaximumNodeSize + 1;
         node_as_branch.is_branch = true;
-        emplace_recursively_helper(new_index_of_first_child, boundary, point);
+        emplace_recursively_helper(new_index_of_first_child, boundary, point, index);
     }
 
     inline void recursively_gather_points(uint64_t node_index, tree_node_leaf &leaf) {
@@ -605,9 +669,9 @@ private:
         tree_node &node = nodes_[node_index];
         if (node.is_a_leaf()) {
             for (uint16_t i = 0; i < node.leaf.size; ++i) {
-                leaf.items[leaf.size++] = std::move(node.leaf.items[i]);
+                leaf.items[leaf.size++] = node.leaf.items[i];
             }
-            assert(leaf.size <= MAXIMUM_NODE_SIZE);
+            assert(leaf.size <= MaximumNodeSize);
             node.leaf.size = 0;
             return;
         }
@@ -625,16 +689,16 @@ private:
     inline void erase_recursively(uint64_t                            node_index,
                                   const bounding_box<CoordinateType> &boundary,
                                   uint64_t                            parent_size_after_removal,
-                                  std::array<CoordinateType, rank>    point) {
+                                  std::array<CoordinateType, Rank>    point) {
         assert(node_index < nodes_.size());
 
         tree_node &node = nodes_[node_index];
         if (node.is_a_leaf()) {
             for (uint16_t i = 0; i < node.leaf.size; ++i) {
-                if (internal::equal<CoordinateType, rank>(point, node.leaf.items[i])) {
+                if (internal::equal<CoordinateType, Rank>(point, node.leaf.items[i].coordinates)) {
                     uint64_t last_index = node.leaf.size - 1;
                     if (last_index != i) {
-                        node.leaf.items[i] = std::move(node.leaf.items[last_index]);
+                        node.leaf.items[i] = node.leaf.items[last_index];
                     }
                     --node.leaf.size;
 
@@ -651,11 +715,11 @@ private:
                           size_after_removal,
                           point);
 
-        if (parent_size_after_removal <= MAXIMUM_NODE_SIZE) {
+        if (parent_size_after_removal <= MaximumNodeSize) {
             return;
         }
 
-        if (--node.branch.size > MAXIMUM_NODE_SIZE) {
+        if (--node.branch.size > MaximumNodeSize) {
             return;
         }
 
@@ -663,64 +727,81 @@ private:
         /// EXPLANATION: Not doing it at the root because of the union.
         uint64_t index_of_first_child = node.branch.index_of_first_child;
         node = tree_node();
-        internal::unroll_for<BRANCHING_FACTOR>(uint64_t(0), BRANCHING_FACTOR, [&](auto quad) {
+        internal::unroll_for<BranchingFactor>(uint64_t(0), BranchingFactor, [&](auto quad) {
             recursively_gather_points(index_of_first_child + quad, node.leaf);
         });
         freed_nodes_.push_back(index_of_first_child);
-        assert(node.leaf.size <= MAXIMUM_NODE_SIZE);
+        assert(node.leaf.size <= MaximumNodeSize);
     }
 
-    template <typename Func>
+    template <typename Func, typename ConstOrNot>
     inline void find_recursively(const bounding_box<CoordinateType> &bbox,
                                  const bounding_box<CoordinateType> &boundary,
                                  Func                                func,
-                                 uint64_t                            node_index) const {
+                                 uint64_t                            node_index) {
         assert(node_index < nodes_.size());
 
-        const tree_node &node = nodes_[node_index];
+        tree_node &node = nodes_[node_index];
         if (node.is_a_leaf()) {
             for (uint64_t i = 0; i < node.leaf.size; ++i) {
-                if (bbox.contains(node.leaf.items[i])) {
-                    func(node.leaf.items[i]);
+                if (bbox.contains(node.leaf.items[i].coordinates)) {
+                    if constexpr (std::is_void_v<StorageType>) {
+                        func(ConstOrNot(node.leaf.items[i].coordinates));
+                    } else {
+                        func(ConstOrNot(node.leaf.items[i].coordinates,
+                                        storage_.vec[node.leaf.items[i].index]));
+                    }
                 }
             }
             return;
         }
 
-        internal::unroll_for<BRANCHING_FACTOR>(uint64_t(0), BRANCHING_FACTOR, [&](auto quad) {
+        internal::unroll_for<BranchingFactor>(uint64_t(0), BranchingFactor, [&](auto quad) {
             auto new_boundary = boundary.qrecurse(quad);
             if (bbox.overlaps(new_boundary)) {
-                find_recursively(bbox, new_boundary, func, node.branch.index_of_first_child + quad);
+                find_recursively<Func, ConstOrNot>(
+                    bbox, new_boundary, func, node.branch.index_of_first_child + quad);
             }
         });
     }
 
+    template <typename ConstOrNot>
     void nearest_recursively(uint64_t                            node_index,
                              const bounding_box<CoordinateType> &boundary,
-                             std::array<CoordinateType, rank>    point,
+                             std::array<CoordinateType, Rank>    point,
                              CoordinateType                     &nearest_distance_squared,
-                             std::vector<const_iterator>        &results) const {
+                             std::vector<ConstOrNot>            &results) {
         assert(node_index < nodes_.size());
 
-        const tree_node &node = nodes_[node_index];
+        tree_node &node = nodes_[node_index];
 
         if (node.is_a_leaf()) {
             for (uint64_t i = 0; i < node.leaf.size; ++i) {
-                auto distance =
-                    euclidean_distance_squared_arr<CoordinateType, rank>(point, node.leaf.items[i]);
+                auto distance = euclidean_distance_squared_arr<CoordinateType, Rank>(
+                    point, node.leaf.items[i].coordinates);
                 if (distance < nearest_distance_squared) {
                     results.clear();
                     nearest_distance_squared = distance;
-                    results.push_back(presence_.find(node.leaf.items[i]));
+                    if constexpr (std::is_void_v<StorageType>) {
+                        results.push_back(ConstOrNot(node.leaf.items[i].coordinates));
+                    } else {
+                        results.push_back(ConstOrNot(node.leaf.items[i].coordinates,
+                                                     storage_.vec[node.leaf.items[i].index]));
+                    }
                 } else if (distance == nearest_distance_squared) {
-                    results.push_back(presence_.find(node.leaf.items[i]));
+                    if constexpr (std::is_void_v<StorageType>) {
+                        results.push_back(ConstOrNot(node.leaf.items[i].coordinates));
+                    } else {
+                        results.push_back(ConstOrNot(node.leaf.items[i].coordinates,
+                                                     storage_.vec[node.leaf.items[i].index]));
+                    }
                 }
             }
             return;
         }
 
-        std::array<bounding_box<CoordinateType>, BRANCHING_FACTOR> new_boundaries;
-        internal::unroll_for<BRANCHING_FACTOR>(uint64_t(0), BRANCHING_FACTOR, [&](auto quad) {
+        std::array<bounding_box<CoordinateType>, BranchingFactor> new_boundaries;
+        internal::unroll_for<BranchingFactor>(uint64_t(0), BranchingFactor, [&](auto quad) {
             new_boundaries[quad] = boundary.qrecurse(quad);
         });
 
@@ -731,8 +812,8 @@ private:
                             nearest_distance_squared,
                             results);
 
-        internal::unroll_for<BRANCHING_FACTOR - 1>(uint64_t(1), BRANCHING_FACTOR, [&](auto i) {
-            uint64_t quad = (i + selected_quad) % BRANCHING_FACTOR;
+        internal::unroll_for<BranchingFactor - 1>(uint64_t(1), BranchingFactor, [&](auto i) {
+            uint64_t quad = (i + selected_quad) % BranchingFactor;
             if (new_boundaries[quad].sdistance(point) <= nearest_distance_squared) {
                 nearest_recursively(node.branch.index_of_first_child + quad,
                                     new_boundaries[quad],
@@ -743,35 +824,35 @@ private:
         });
     }
 
-    const bounding_box<CoordinateType, rank> boundary_;
+    const bounding_box<CoordinateType, Rank> boundary_;
     std::vector<tree_node>                   nodes_;
     std::vector<uint64_t>                    freed_nodes_;
-    storage_container                        storage_;
-    storage_pool                             pool_;
-    hash_table_type                          presence_;
+
+    storage_container storage_;
+    storage_pool      pool_;
+    hash_table_type   presence_;
 };
 
 }  // namespace internal
 
 template <typename CoordinateType,
           typename StorageType,
-          uint64_t rank = 2,
-          uint16_t MAXIMUM_NODE_SIZE = 64>
-class spatial_map : public internal::spatial_tree<StorageType, CoordinateType, MAXIMUM_NODE_SIZE> {
+          uint64_t Rank = 2,
+          uint16_t MaximumNodeSize = 64>
+class spatial_map : public internal::spatial_tree<StorageType, CoordinateType, MaximumNodeSize> {
 public:
     static_assert(!std::is_void_v<StorageType>, "For no storage type, use st::spatial_set");
-    spatial_map()
-        : internal::spatial_tree<StorageType, CoordinateType, rank, MAXIMUM_NODE_SIZE>() {}
-    spatial_map(const bounding_box<CoordinateType, rank> &boundary)
-        : internal::spatial_tree<StorageType, CoordinateType, rank, MAXIMUM_NODE_SIZE>(boundary) {}
+    spatial_map() : internal::spatial_tree<StorageType, CoordinateType, Rank, MaximumNodeSize>() {}
+    spatial_map(const bounding_box<CoordinateType, Rank> &boundary)
+        : internal::spatial_tree<StorageType, CoordinateType, Rank, MaximumNodeSize>(boundary) {}
 };
 
-template <typename CoordinateType = double, uint64_t rank = 2, uint16_t MAXIMUM_NODE_SIZE = 64>
-class spatial_set : public internal::spatial_tree<void, CoordinateType, rank, MAXIMUM_NODE_SIZE> {
+template <typename CoordinateType = double, uint64_t Rank = 2, uint16_t MaximumNodeSize = 64>
+class spatial_set : public internal::spatial_tree<void, CoordinateType, Rank, MaximumNodeSize> {
 public:
-    spatial_set() : internal::spatial_tree<void, CoordinateType, rank, MAXIMUM_NODE_SIZE>() {}
-    spatial_set(const bounding_box<CoordinateType, rank> &boundary)
-        : internal::spatial_tree<void, CoordinateType, rank, MAXIMUM_NODE_SIZE>(boundary) {}
+    spatial_set() : internal::spatial_tree<void, CoordinateType, Rank, MaximumNodeSize>() {}
+    spatial_set(const bounding_box<CoordinateType, Rank> &boundary)
+        : internal::spatial_tree<void, CoordinateType, Rank, MaximumNodeSize>(boundary) {}
 };
 
 }  // namespace st

@@ -18,7 +18,7 @@ struct opaque_data {
     char opaque[1];
     opaque_data() {}
 };
-static constexpr uint64_t MAX_NODE_SIZE = 128;
+static constexpr uint64_t MAX_NODE_SIZE = 96;
 
 template <typename CoordT>
 std::vector<std::pair<CoordT, CoordT>> generate_points(CoordT BEG, CoordT END, uint64_t test_size) {
@@ -133,7 +133,7 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
     uint64_t n_points_found = 0;
     for (auto _ : state) {
         for (const auto &bbox : bounding_boxes) {
-            tree.find(bbox, [&](auto) { ++n_points_found; });
+            tree.find(bbox, [&](const auto) { ++n_points_found; });
         }
     }
     state.counters["found"] = n_points_found / state.iterations() / n_bounding_boxes;

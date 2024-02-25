@@ -33,7 +33,7 @@ int main() {
         return 4;
     }
 
-    auto coordinates = *nearest_points.front();
+    auto coordinates = nearest_points.front();
     if (coordinates[0] || coordinates[1]) {
         std::cerr << "Should be <0, 0>" << std::endl;
         return 5;

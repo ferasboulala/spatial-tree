@@ -11,23 +11,23 @@ set(ALL_LIBRARIES)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../bin/")
 
 find_package(GTest CONFIG)
-# if (${GTest_FOUND})
-#   enable_testing()
-#   function(create_test test_name entry_point)
-#     add_executable(${test_name} ${entry_point})
-#     target_include_directories(
-#       ${test_name}
-#       PUBLIC
-#       ${CMAKE_SOURCE_DIR}
-#       # Temporary, for Mac.
-#       /usr/local/include/
-#      )
-#      target_link_libraries(${test_name} GTest::gtest_main)
-#      add_test(${test_name} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${test_name}")
-#    endfunction()
+if (${GTest_FOUND})
+  enable_testing()
+  function(create_test test_name entry_point)
+    add_executable(${test_name} ${entry_point})
+    target_include_directories(
+      ${test_name}
+      PUBLIC
+      ${CMAKE_SOURCE_DIR}
+      # Temporary, for Mac.
+      /usr/local/include/
+     )
+     target_link_libraries(${test_name} GTest::gtest_main)
+     add_test(${test_name} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${test_name}")
+   endfunction()
 
-#    create_test("utest" src/utest.cpp)
-# endif()
+   create_test("utest" src/utest.cpp)
+endif()
 
 find_package(benchmark CONFIG)
 if (${benchmark_FOUND})
@@ -44,20 +44,20 @@ if (${benchmark_FOUND})
    create_benchmark("bench" src/bench.cpp)
 endif()
 
-# add_executable("example" src/example.cpp)
+add_executable("example" src/example.cpp)
 
-# find_package(OpenCV)
-# if (DEFINED OpenCV_LIBRARIES)
-#   function(create_binary target_name entry_point)
-#     add_executable(${target_name} ${entry_point})
-#     target_include_directories(
-#       ${target_name}
-#       PUBLIC
-#       ${CMAKE_SOURCE_DIR}
-#       ${OpenCV_INCLUDE_DIRS})
-#     target_link_libraries(
-#       ${target_name}
-#       ${OpenCV_LIBRARIES})
-#   endfunction()
-#   create_binary("interactive" src/interactive.cpp)
-# endif()
+find_package(OpenCV)
+if (DEFINED OpenCV_LIBRARIES)
+  function(create_binary target_name entry_point)
+    add_executable(${target_name} ${entry_point})
+    target_include_directories(
+      ${target_name}
+      PUBLIC
+      ${CMAKE_SOURCE_DIR}
+      ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(
+      ${target_name}
+      ${OpenCV_LIBRARIES})
+  endfunction()
+  create_binary("interactive" src/interactive.cpp)
+endif()

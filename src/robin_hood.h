@@ -656,6 +656,12 @@ struct pair {
     T2 second; // NOLINT(misc-non-private-member-variables-in-classes)
 };
 
+// Specializing on void to avoid void reference errors.
+template <typename T1>
+struct pair<T1, void> {
+    T1 first;  // NOLINT(misc-non-private-member-variables-in-classes)
+};
+
 template <typename A, typename B>
 inline void swap(pair<A, B>& a, pair<A, B>& b) noexcept(
     noexcept(std::declval<pair<A, B>&>().swap(std::declval<pair<A, B>&>()))) {
