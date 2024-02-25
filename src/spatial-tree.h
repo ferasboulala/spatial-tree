@@ -18,6 +18,7 @@
 #define __unroll_8 _Pragma("clang loop unroll_count(8)")
 #endif
 
+#define NDEBUG
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -474,7 +475,7 @@ public:
                                              Args &&...args) {
         assert(boundary_.contains(point));
 
-        return emplace_recursively(0, boundary_, point, std::forward<Args>(args)...);
+        return emplace_recursively<false>(0, boundary_, point, std::forward<Args>(args)...);
     }
 
     inline bool erase(std::array<CoordinateType, rank> point) {
@@ -527,22 +528,20 @@ private:
     struct tree_node_storage : tree_node_storage_impl::type {};
 
     struct tree_node_leaf {
-        tree_node_storage *items;
-        uint8_t            size;
+        std::array<tree_node_storage, MAXIMUM_NODE_SIZE> items;
+        uint8_t                                          size;
 
-        inline tree_node_leaf() noexcept {
-            items = (tree_node_storage *)malloc(sizeof(tree_node_storage) * MAXIMUM_NODE_SIZE);
-            size = 0;
-        }
+        inline tree_node_leaf() noexcept : size(0) {}
         inline tree_node_leaf(const tree_node_leaf &other) noexcept : tree_node_leaf() {
             *this = other;
         }
         inline tree_node_leaf(tree_node_leaf &&other) noexcept { *this = std::move(other); }
 
         inline tree_node_leaf &operator=(tree_node_leaf &&other) noexcept {
-            items = other.items;
             size = other.size;
-            other.items = nullptr;
+            for (uint8_t i = 0; i < size; ++i) {
+                items[i] = std::move(other.items[i]);
+            }
 
             return *this;
         }
@@ -560,8 +559,6 @@ private:
             for (uint8_t i = 0; i < size; ++i) {
                 items[i].~tree_node_storage();
             }
-            free(items);
-            items = nullptr;
         }
     };
 
@@ -643,7 +640,7 @@ private:
         }
     }
 
-    template <typename... Args>
+    template <bool unique, typename... Args>
     inline std::pair<iterator, bool> emplace_recursively_helper(
         uint64_t                            index_of_first_child,
         const bounding_box<CoordinateType> &boundary,
@@ -651,11 +648,11 @@ private:
         Args &&...args) {
         const auto [new_boundary, selected_quad] = boundary.recurse(point);
 
-        return emplace_recursively(
+        return emplace_recursively<unique>(
             index_of_first_child + selected_quad, new_boundary, point, std::forward<Args>(args)...);
     }
 
-    template <typename... Args>
+    template <bool unique, typename... Args>
     std::pair<iterator, bool> emplace_recursively(uint64_t                            node_index,
                                                   const bounding_box<CoordinateType> &boundary,
                                                   std::array<CoordinateType, rank>    point,
@@ -665,22 +662,24 @@ private:
 
         tree_node &node = nodes_[node_index];
         if (node.is_a_branch()) {
-            const auto ret = emplace_recursively_helper(
+            const auto ret = emplace_recursively_helper<unique>(
                 node.branch.index_of_first_child, boundary, point, std::forward<Args>(args)...);
             nodes_[node_index].branch.size += ret.second;
 
             return ret;
         }
 
-        uint64_t item_index = 0;
-        for (uint64_t i = 0; i < node.leaf.size; ++i) {
-            const bool same =
-                internal::equal<CoordinateType, rank>(point, node.leaf.items[i].coordinates);
-            item_index += (i + 1) * same;
-        }
+        if constexpr (!unique) {
+            uint64_t item_index = 0;
+            for (uint64_t i = 0; i < node.leaf.size; ++i) {
+                const bool same =
+                    internal::equal<CoordinateType, rank>(point, node.leaf.items[i].coordinates);
+                item_index += (i + 1) * same;
+            }
 
-        if (item_index) {
-            return {iterator(this, node_index, item_index - 1), false};
+            if (item_index) {
+                return {iterator(this, node_index, item_index - 1), false};
+            }
         }
 
         const bool node_is_full = node.leaf.size == MAXIMUM_NODE_SIZE;
@@ -716,13 +715,13 @@ private:
         tree_node &node_as_branch = nodes_[node_index];
         internal::unroll_for<MAXIMUM_NODE_SIZE>(uint8_t(0), MAXIMUM_NODE_SIZE, [&](auto i) {
             if constexpr (std::is_void_v<StorageType>) {
-                emplace_recursively_helper(
+                emplace_recursively_helper<true>(
                     new_index_of_first_child, boundary, node_as_branch.leaf.items[i].coordinates);
             } else {
-                emplace_recursively_helper(new_index_of_first_child,
-                                           boundary,
-                                           node_as_branch.leaf.items[i].coordinates,
-                                           node_as_branch.leaf.items[i].storage);
+                emplace_recursively_helper<true>(new_index_of_first_child,
+                                                 boundary,
+                                                 node_as_branch.leaf.items[i].coordinates,
+                                                 node_as_branch.leaf.items[i].storage);
             }
         });
         node_as_branch.~tree_node();
@@ -730,7 +729,7 @@ private:
         node_as_branch.branch.size = MAXIMUM_NODE_SIZE + 1;
         node_as_branch.is_branch = true;
 
-        const auto ret = emplace_recursively_helper(
+        const auto ret = emplace_recursively_helper<true>(
             new_index_of_first_child, boundary, point, std::forward<Args>(args)...);
         assert(ret.second);
 
