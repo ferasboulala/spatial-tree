@@ -20,7 +20,7 @@ int main() {
     }
 
     int counter = 0;
-    my_quad_tree.find(st::bounding_box<double, 2>({-5.0, 5.0, 5.0, -5.0}),
+    my_quad_tree.find(st::bounding_box<double, 2>({-5.0, -5.0, 5.0, 5.0}),
                       [&](auto) { ++counter; });
     if (counter != 2) {
         std::cerr << "Could not find all points that were added" << std::endl;
