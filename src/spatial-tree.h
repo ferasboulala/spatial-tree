@@ -2972,8 +2972,53 @@ private:
                                   internal::point_hash<CoordinateType, Rank>,
                                   internal::point_equal<CoordinateType, Rank>>>::type;
 
-    using iterator = hash_table_type::iterator;
-    using const_iterator = hash_table_type::const_iterator;
+    template <typename ConstOrNot>
+    struct iterator {
+        using iterator_category = std::forward_iterator_tag;
+        using difference_type = std::ptrdiff_t;
+        using value_type = iterator;
+        using pointer = value_type*;
+        using reference = value_type&;
+
+    public:
+        inline iterator(auto it, auto tree) : it_(it), tree_(tree) {}
+        inline auto operator*() const {
+            if constexpr (std::is_void_v<StorageType>) {
+                return *it_;
+            } else {
+                auto [key, idx] = *it_;
+                assert(idx < tree_->storage_.vec.size());
+                return std::pair<std::array<CoordinateType, Rank>, const StorageType&>{
+                    key, tree_->storage_.vec[idx].data};
+            }
+        }
+        inline auto operator*() {
+            if constexpr (std::is_void_v<StorageType>) {
+                return *it_;
+            } else {
+                auto [key, idx] = *it_;
+                assert(idx < tree_->storage_.vec.size());
+                return std::pair<std::array<CoordinateType, Rank>, StorageType&>{
+                    key,
+                    const_cast<spatial_tree<StorageType, CoordinateType, Rank, MaximumNodeSize>*>(
+                        tree_)
+                        ->storage_.vec[idx]
+                        .data};
+            }
+        }
+        inline auto      operator->() const { return this->operator(); }
+        inline auto      operator->() { return this->operator(); }
+        inline iterator& operator++() {
+            ++it_;
+            return *this;
+        };
+        inline bool operator==(const iterator& other) const { return it_ == other.it_; }
+        inline bool operator!=(const iterator& other) const { return !(*this == other); }
+
+    private:
+        ConstOrNot                                                              it_;
+        const spatial_tree<StorageType, CoordinateType, Rank, MaximumNodeSize>* tree_;
+    };
 
 public:
     spatial_tree() { clear(); }
@@ -3029,31 +3074,39 @@ public:
         walk_recursively(0, boundary_);
     }
 
-    inline const_iterator begin() const { return presence_.begin(); }
-    inline const_iterator end() const { return presence_.end(); }
-    inline iterator       begin() { return presence_.begin(); }
-    inline iterator       end() { return presence_.end(); }
+    inline auto begin() const {
+        return iterator<typename hash_table_type::const_iterator>{presence_.begin(), this};
+    }
+    inline auto end() const {
+        return iterator<typename hash_table_type::const_iterator>{presence_.end(), this};
+    }
+    inline auto begin() {
+        return iterator<typename hash_table_type::iterator>{presence_.begin(), this};
+    }
+    inline auto end() {
+        return iterator<typename hash_table_type::iterator>{presence_.end(), this};
+    }
 
     template <typename... Args>
-    inline std::pair<iterator, bool> emplace(std::array<CoordinateType, Rank> point,
-                                             Args&&... args) {
+    inline std::pair<iterator<typename hash_table_type::iterator>, bool> emplace(
+        std::array<CoordinateType, Rank> point, Args&&... args) {
         assert(boundary_.contains(point));
 
         if constexpr (std::is_void_v<StorageType>) {
             auto [it, inserted] = presence_.emplace(point);
             if (!inserted) {
-                return {it, inserted};
+                return {iterator<typename hash_table_type::iterator>{it, this}, inserted};
             }
 
             emplace_recursively(0, boundary_, point);
 
-            return {it, inserted};
+            return {iterator<typename hash_table_type::iterator>{it, this}, inserted};
         } else {
             auto [it, inserted] = presence_.emplace(point, storage_.vec.size());
             auto& [_, idx] = *it;
 
             if (!inserted) {
-                return {it, false};
+                return {iterator<typename hash_table_type::iterator>{it, this}, false};
             }
 
             if (pool_.vec.empty()) {
@@ -3066,7 +3119,7 @@ public:
 
             emplace_recursively(0, boundary_, point, idx);
 
-            return {it, true};
+            return {iterator<typename hash_table_type::iterator>{it, this}, true};
         }
     }
 
@@ -3116,10 +3169,14 @@ public:
         }
     }
 
-    inline const_iterator find(std::array<CoordinateType, Rank> point) const {
-        return presence_.find(point);
+    inline iterator<typename hash_table_type::const_iterator> find(
+        std::array<CoordinateType, Rank> point) const {
+        return {presence_.find(point), this};
     }
-    inline iterator find(std::array<CoordinateType, Rank> point) { return presence_.find(point); }
+    inline iterator<typename hash_table_type::iterator> find(
+        std::array<CoordinateType, Rank> point) {
+        return {presence_.find(point), this};
+    }
 
     auto nearest(std::array<CoordinateType, Rank> point) {
         CoordinateType nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
