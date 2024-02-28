@@ -269,6 +269,57 @@ TEST(TestSpatialTree, MutableAccesses) {
     ASSERT_EQ(data2, 1);
 }
 
+TEST(TestSpatialTree, Destructors) {
+    int counter = 0;
+    class MyObject {
+    public:
+        inline MyObject(int &c) : counter(&c) {
+            assert(enabled);
+            enabled = true;
+            *counter = *counter + 1;
+        }
+        inline MyObject(MyObject &&other) : enabled(other.enabled), counter(other.counter) {
+            assert(enabled);
+            *counter = *counter + 1;
+        }
+        inline MyObject(const MyObject &other) : enabled(other.enabled), counter(other.counter) {
+            assert(enabled);
+            *counter = *counter + 1;
+        }
+        inline ~MyObject() {
+            assert(enabled);
+            enabled = false;
+            *counter = *counter - 1;
+        }
+
+    private:
+        bool enabled;
+        int *counter;
+    };
+
+    st::internal::spatial_tree<MyObject, int> tree;
+    ASSERT_TRUE(tree.emplace({0, 0}, counter).second);
+    ASSERT_TRUE(tree.emplace({0, 1}, counter).second);
+    ASSERT_TRUE(tree.emplace({1, 0}, counter).second);
+    ASSERT_TRUE(tree.emplace({1, 1}, counter).second);
+    ASSERT_EQ(counter, 4);
+    ASSERT_TRUE(tree.erase({0, 0}));
+    ASSERT_EQ(counter, 3);
+    ASSERT_TRUE(tree.erase({1, 0}));
+    ASSERT_EQ(counter, 2);
+    ASSERT_TRUE(tree.erase({0, 1}));
+    ASSERT_EQ(counter, 1);
+    ASSERT_TRUE(tree.erase({1, 1}));
+    ASSERT_EQ(counter, 0);
+    ASSERT_TRUE(tree.emplace({0, 0}, counter).second);
+    ASSERT_TRUE(tree.emplace({0, 1}, counter).second);
+    ASSERT_TRUE(tree.emplace({1, 0}, counter).second);
+    ASSERT_TRUE(tree.emplace({1, 1}, counter).second);
+    ASSERT_EQ(counter, 4);
+    tree.clear();
+    ASSERT_EQ(counter, 0);
+}
+
 TEST(TestSpatialTree, UniqueInsertions) {
     const auto typed_test = [&]<typename CoordT>() {
         const std::vector<uint64_t> test_sizes = {1, 2, 3, 7, 10, 100, 9999, 10000};
