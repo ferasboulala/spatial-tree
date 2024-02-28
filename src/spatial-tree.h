@@ -2966,7 +2966,7 @@ private:
                                   internal::point_hash<CoordinateType, Rank>,
                                   internal::point_equal<CoordinateType, Rank>>>::type;
 
-    template <typename ConstOrNot>
+    template <typename MaybeConstType>
     struct iterator {
         using iterator_category = std::forward_iterator_tag;
         using difference_type = std::ptrdiff_t;
@@ -2982,6 +2982,7 @@ private:
             } else {
                 auto [key, idx] = *it_;
                 assert(idx < tree_->storage_.vec.size());
+                assert(tree_->storage_.vec[idx].enabled);
                 return std::pair<std::array<CoordinateType, Rank>, const StorageType&>{
                     key, tree_->storage_.vec[idx].data};
             }
@@ -2992,6 +2993,7 @@ private:
             } else {
                 auto [key, idx] = *it_;
                 assert(idx < tree_->storage_.vec.size());
+                assert(tree_->storage_.vec[idx].enabled);
                 return std::pair<std::array<CoordinateType, Rank>, StorageType&>{
                     key,
                     const_cast<spatial_tree<StorageType, CoordinateType, Rank, MaximumNodeSize>*>(
@@ -3010,7 +3012,7 @@ private:
         inline bool operator!=(const iterator& other) const { return !(*this == other); }
 
     private:
-        ConstOrNot                                                              it_;
+        MaybeConstType                                                          it_;
         const spatial_tree<StorageType, CoordinateType, Rank, MaximumNodeSize>* tree_;
     };
 
@@ -3024,6 +3026,7 @@ public:
     ~spatial_tree() = default;
 
     inline void reserve(uint64_t capacity) {
+        assert(capacity);
         nodes_.reserve(BranchingFactor * capacity / MaximumNodeSize);
         if constexpr (!std::is_void_v<StorageType>) {
             storage_.vec.reserve(capacity);
@@ -3366,7 +3369,7 @@ private:
         assert(node.leaf.size <= MaximumNodeSize);
     }
 
-    template <typename Func, typename ConstOrNot>
+    template <typename Func, typename MaybeConstType>
     inline void find_recursively(const bounding_box<CoordinateType>& bbox,
                                  const bounding_box<CoordinateType>& boundary,
                                  Func                                func,
@@ -3378,10 +3381,10 @@ private:
             for (uint64_t i = 0; i < node.leaf.size; ++i) {
                 if (bbox.contains(node.leaf.items[i].coordinates)) {
                     if constexpr (std::is_void_v<StorageType>) {
-                        func(ConstOrNot(node.leaf.items[i].coordinates));
+                        func(MaybeConstType(node.leaf.items[i].coordinates));
                     } else {
-                        func(ConstOrNot(node.leaf.items[i].coordinates,
-                                        storage_.vec[node.leaf.items[i].index].data));
+                        func(MaybeConstType(node.leaf.items[i].coordinates,
+                                            storage_.vec[node.leaf.items[i].index].data));
                     }
                 }
             }
@@ -3391,18 +3394,18 @@ private:
         internal::unroll_for<BranchingFactor>(uint64_t(0), BranchingFactor, [&](auto quad) {
             auto new_boundary = boundary.qrecurse(quad);
             if (bbox.overlaps(new_boundary)) {
-                find_recursively<Func, ConstOrNot>(
+                find_recursively<Func, MaybeConstType>(
                     bbox, new_boundary, func, node.branch.index_of_first_child + quad);
             }
         });
     }
 
-    template <typename ConstOrNot>
+    template <typename MaybeConstType>
     void nearest_recursively(uint64_t                            node_index,
                              const bounding_box<CoordinateType>& boundary,
                              std::array<CoordinateType, Rank>    point,
                              CoordinateType&                     nearest_distance_squared,
-                             std::vector<ConstOrNot>&            results) {
+                             std::vector<MaybeConstType>&        results) {
         assert(node_index < nodes_.size());
 
         tree_node& node = nodes_[node_index];
@@ -3415,17 +3418,19 @@ private:
                     results.clear();
                     nearest_distance_squared = distance;
                     if constexpr (std::is_void_v<StorageType>) {
-                        results.push_back(ConstOrNot(node.leaf.items[i].coordinates));
+                        results.emplace_back(MaybeConstType(node.leaf.items[i].coordinates));
                     } else {
-                        results.push_back(ConstOrNot(node.leaf.items[i].coordinates,
-                                                     storage_.vec[node.leaf.items[i].index].data));
+                        results.emplace_back(
+                            MaybeConstType(node.leaf.items[i].coordinates,
+                                           storage_.vec[node.leaf.items[i].index].data));
                     }
                 } else if (distance == nearest_distance_squared) {
                     if constexpr (std::is_void_v<StorageType>) {
-                        results.push_back(ConstOrNot(node.leaf.items[i].coordinates));
+                        results.emplace_back(MaybeConstType(node.leaf.items[i].coordinates));
                     } else {
-                        results.push_back(ConstOrNot(node.leaf.items[i].coordinates,
-                                                     storage_.vec[node.leaf.items[i].index].data));
+                        results.emplace_back(
+                            MaybeConstType(node.leaf.items[i].coordinates,
+                                           storage_.vec[node.leaf.items[i].index].data));
                     }
                 }
             }
