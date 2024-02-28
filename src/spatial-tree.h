@@ -2933,10 +2933,16 @@ private:
             template <typename... Args>
             inline storage_data(Args&&... args) noexcept
                 : data(std::forward<Args>(args)...), enabled(true) {}
-            inline storage_data(const storage_data& other)
-                : data(other.data), enabled(other.enabled) {}
-            inline storage_data(storage_data&& other) noexcept
-                : data(std::move(other.data)), enabled(other.enabled) {}
+            inline storage_data(const storage_data& other) : enabled(other.enabled) {
+                if (enabled) {
+                    new (&data) StorageType(other.data);
+                }
+            }
+            inline storage_data(storage_data&& other) noexcept : enabled(other.enabled) {
+                if (enabled) {
+                    new (&data) StorageType(std::move(other.data));
+                }
+            }
             inline ~storage_data() noexcept {
                 if (enabled) {
                     data.~StorageType();
@@ -3101,7 +3107,8 @@ public:
                 storage_.vec.emplace_back(std::forward<Args>(args)...);
             } else {
                 idx = pool_.vec.back();
-                new (&storage_.vec[idx]) storage_container_full::storage_data(std::forward<Args>(args)...);
+                new (&storage_.vec[idx])
+                    storage_container_full::storage_data(std::forward<Args>(args)...);
                 pool_.vec.pop_back();
             }
 
