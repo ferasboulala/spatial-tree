@@ -2748,7 +2748,7 @@ inline bool intervals_overlap(CoordinateType lhs_beg,
 }  // namespace internal
 
 // When replacing the other bounding_box, be sure to check operand order.
-template <typename CoordinateType, uint64_t Rank = 2>
+template <typename CoordinateType, uint64_t Rank>
 struct bounding_box {
     static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8);
 
@@ -2901,9 +2901,9 @@ struct bounding_box {
 
 namespace internal {
 
-template <typename StorageType = void,
-          typename CoordinateType = int,
-          uint64_t Rank = 2,
+template <typename CoordinateType,
+          typename StorageType,
+          uint64_t Rank,
           uint16_t MaximumNodeSize = 64>
 class spatial_tree {
 private:
@@ -2996,7 +2996,7 @@ private:
                 assert(tree_->storage_.vec[idx].enabled);
                 return std::pair<std::array<CoordinateType, Rank>, StorageType&>{
                     key,
-                    const_cast<spatial_tree<StorageType, CoordinateType, Rank, MaximumNodeSize>*>(
+                    const_cast<spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize>*>(
                         tree_)
                         ->storage_.vec[idx]
                         .data};
@@ -3013,7 +3013,7 @@ private:
 
     private:
         MaybeConstType                                                          it_;
-        const spatial_tree<StorageType, CoordinateType, Rank, MaximumNodeSize>* tree_;
+        const spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize>* tree_;
     };
 
 public:
@@ -3039,19 +3039,19 @@ public:
     inline uint64_t size() const { return presence_.size(); }
     inline bool     empty() const { return size() == 0; }
     inline void     clear() {
-        nodes_.clear();
-        nodes_.resize(1);
-        freed_nodes_.clear();
-        if constexpr (!std::is_void_v<StorageType>) {
-            storage_.vec.clear();
-            pool_.vec.clear();
+            nodes_.clear();
+            nodes_.resize(1);
+            freed_nodes_.clear();
+            if constexpr (!std::is_void_v<StorageType>) {
+                storage_.vec.clear();
+                pool_.vec.clear();
         }
-        presence_.clear();
+            presence_.clear();
     }
 
     template <typename Func>
     void walk(Func func) const {
-        const std::function<void(uint64_t, const bounding_box<CoordinateType>&)> walk_recursively =
+        const std::function<void(uint64_t, const bounding_box<CoordinateType, Rank>&)> walk_recursively =
             [&](auto node_index, auto boundary) {
                 assert(node_index < nodes_.size());
                 const tree_node& node = nodes_[node_index];
@@ -3148,7 +3148,7 @@ public:
     }
 
     template <typename Func>
-    inline void find(const bounding_box<CoordinateType>& bbox, Func func) {
+    inline void find(const bounding_box<CoordinateType, Rank>& bbox, Func func) {
         if constexpr (std::is_void_v<StorageType>) {
             find_recursively<Func, std::array<CoordinateType, Rank>>(bbox, boundary_, func, 0);
         } else {
@@ -3158,7 +3158,7 @@ public:
     }
 
     template <typename Func>
-    inline void find(const bounding_box<CoordinateType>& bbox, Func func) const {
+    inline void find(const bounding_box<CoordinateType, Rank>& bbox, Func func) const {
         if constexpr (std::is_void_v<StorageType>) {
             find_recursively<Func, std::array<CoordinateType, Rank>>(bbox, boundary_, func, 0);
         } else {
@@ -3243,7 +3243,7 @@ private:
     };
 
     inline void emplace_recursively_helper(uint64_t                            index_of_first_child,
-                                           const bounding_box<CoordinateType>& boundary,
+                                           const bounding_box<CoordinateType, Rank>& boundary,
                                            std::array<CoordinateType, Rank>    point,
                                            uint64_t                            index = -1) {
         const auto [new_boundary, selected_quad] = boundary.recurse(point);
@@ -3251,7 +3251,7 @@ private:
     }
 
     void emplace_recursively(uint64_t                            node_index,
-                             const bounding_box<CoordinateType>& boundary,
+                             const bounding_box<CoordinateType, Rank>& boundary,
                              std::array<CoordinateType, Rank>    point,
                              uint64_t                            index = -1) {
         assert(node_index < nodes_.size());
@@ -3327,7 +3327,7 @@ private:
     }
 
     inline void erase_recursively(uint64_t                            node_index,
-                                  const bounding_box<CoordinateType>& boundary,
+                                  const bounding_box<CoordinateType, Rank>& boundary,
                                   uint64_t                            parent_size_after_removal,
                                   std::array<CoordinateType, Rank>    point) {
         assert(node_index < nodes_.size());
@@ -3370,8 +3370,8 @@ private:
     }
 
     template <typename Func, typename MaybeConstType>
-    inline void find_recursively(const bounding_box<CoordinateType>& bbox,
-                                 const bounding_box<CoordinateType>& boundary,
+    inline void find_recursively(const bounding_box<CoordinateType, Rank>& bbox,
+                                 const bounding_box<CoordinateType, Rank>& boundary,
                                  Func                                func,
                                  uint64_t                            node_index) {
         assert(node_index < nodes_.size());
@@ -3402,7 +3402,7 @@ private:
 
     template <typename MaybeConstType>
     void nearest_recursively(uint64_t                            node_index,
-                             const bounding_box<CoordinateType>& boundary,
+                             const bounding_box<CoordinateType, Rank>& boundary,
                              std::array<CoordinateType, Rank>    point,
                              CoordinateType&                     nearest_distance_squared,
                              std::vector<MaybeConstType>&        results) {
@@ -3437,7 +3437,7 @@ private:
             return;
         }
 
-        std::array<bounding_box<CoordinateType>, BranchingFactor> new_boundaries;
+        std::array<bounding_box<CoordinateType, Rank>, BranchingFactor> new_boundaries;
         internal::unroll_for<BranchingFactor>(uint64_t(0), BranchingFactor, [&](auto quad) {
             new_boundaries[quad] = boundary.qrecurse(quad);
         });
@@ -3474,22 +3474,22 @@ private:
 
 template <typename CoordinateType,
           typename StorageType,
-          uint64_t Rank = 2,
+          uint64_t Rank,
           uint16_t MaximumNodeSize = 64>
-class spatial_map : public internal::spatial_tree<StorageType, CoordinateType, MaximumNodeSize> {
+class spatial_map : public internal::spatial_tree<CoordinateType, StorageType, MaximumNodeSize> {
 public:
     static_assert(!std::is_void_v<StorageType>, "For no storage type, use st::spatial_set");
-    spatial_map() : internal::spatial_tree<StorageType, CoordinateType, Rank, MaximumNodeSize>() {}
+    spatial_map() : internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize>() {}
     spatial_map(const bounding_box<CoordinateType, Rank>& boundary)
-        : internal::spatial_tree<StorageType, CoordinateType, Rank, MaximumNodeSize>(boundary) {}
+        : internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize>(boundary) {}
 };
 
-template <typename CoordinateType = double, uint64_t Rank = 2, uint16_t MaximumNodeSize = 64>
-class spatial_set : public internal::spatial_tree<void, CoordinateType, Rank, MaximumNodeSize> {
+template <typename CoordinateType, uint64_t Rank, uint16_t MaximumNodeSize = 64>
+class spatial_set : public internal::spatial_tree<CoordinateType, void, Rank, MaximumNodeSize> {
 public:
-    spatial_set() : internal::spatial_tree<void, CoordinateType, Rank, MaximumNodeSize>() {}
+    spatial_set() : internal::spatial_tree<CoordinateType, void, Rank, MaximumNodeSize>() {}
     spatial_set(const bounding_box<CoordinateType, Rank>& boundary)
-        : internal::spatial_tree<void, CoordinateType, Rank, MaximumNodeSize>(boundary) {}
+        : internal::spatial_tree<CoordinateType, void, Rank, MaximumNodeSize>(boundary) {}
 };
 
 }  // namespace st

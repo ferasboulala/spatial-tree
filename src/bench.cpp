@@ -18,7 +18,7 @@ struct opaque_data {
     char opaque[sizeof(void*)];
     opaque_data() {}
 };
-static constexpr uint64_t MAX_NODE_SIZE = 128;
+static constexpr uint64_t MAX_NODE_SIZE = 256;
 
 template <typename CoordT>
 std::vector<std::pair<CoordT, CoordT>> generate_points(CoordT BEG, CoordT END, uint64_t test_size) {
@@ -121,13 +121,13 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
 
     static constexpr uint64_t n_bounding_boxes = 1 << 16;
     const auto                bounding_boxes_points = generate_points(BEG, END, n_bounding_boxes);
-    std::vector<st::bounding_box<CoordT>> bounding_boxes;
+    std::vector<st::bounding_box<CoordT, 2>> bounding_boxes;
     bounding_boxes.reserve(n_bounding_boxes);
     for (uint64_t i = 0; i < n_bounding_boxes; ++i) {
         auto [x1, y1] = bounding_boxes_points[i];
         CoordT x2 = x1 + BBOX_DIM_SIZE;
         CoordT y2 = y1 + BBOX_DIM_SIZE;
-        bounding_boxes.push_back(st::bounding_box<CoordT>({x1, y1, x2, y2}));
+        bounding_boxes.push_back(st::bounding_box<CoordT, 2>({x1, y1, x2, y2}));
     }
 
     uint64_t n_points_found = 0;
@@ -208,7 +208,7 @@ void insertions(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
 
-    auto tree = st::internal::spatial_tree<VALUE_TYPE, CoordT, 2, MAX_NODE_SIZE>(
+    auto tree = st::internal::spatial_tree<CoordT, VALUE_TYPE, 2, MAX_NODE_SIZE>(
         st::bounding_box<CoordT, 2>({BEG, BEG, END, END}));
     benchmark_insertions<CoordT>(state, tree);
 }
@@ -218,7 +218,7 @@ void deletions(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
 
-    auto tree = st::internal::spatial_tree<VALUE_TYPE, CoordT, 2, MAX_NODE_SIZE>(
+    auto tree = st::internal::spatial_tree<CoordT, VALUE_TYPE, 2, MAX_NODE_SIZE>(
         st::bounding_box<CoordT, 2>({BEG, BEG, END, END}));
     benchmark_deletions<CoordT>(state, tree);
 }
@@ -228,7 +228,7 @@ void find(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
 
-    auto tree = st::internal::spatial_tree<VALUE_TYPE, CoordT, 2, MAX_NODE_SIZE>(
+    auto tree = st::internal::spatial_tree<CoordT, VALUE_TYPE, 2, MAX_NODE_SIZE>(
         st::bounding_box<CoordT, 2>({BEG, BEG, END, END}));
     benchmark_find<CoordT>(state, tree);
 }
@@ -238,7 +238,7 @@ void find_single(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
 
-    auto tree = st::internal::spatial_tree<VALUE_TYPE, CoordT, 2, MAX_NODE_SIZE>(
+    auto tree = st::internal::spatial_tree<CoordT, VALUE_TYPE, 2, MAX_NODE_SIZE>(
         st::bounding_box<CoordT, 2>({BEG, BEG, END, END}));
     benchmark_find_single<CoordT>(state, tree);
 }
@@ -248,7 +248,7 @@ void nearest(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
 
-    auto tree = st::internal::spatial_tree<VALUE_TYPE, CoordT, 2, MAX_NODE_SIZE>(
+    auto tree = st::internal::spatial_tree<CoordT, VALUE_TYPE, 2, MAX_NODE_SIZE>(
         st::bounding_box<CoordT, 2>({BEG, BEG, END, END}));
     benchmark_nearest<CoordT>(state, tree);
 }

@@ -3,7 +3,7 @@
 #include "spatial-tree.h"
 
 int main() {
-    st::spatial_set<double> my_quad_tree;
+    st::spatial_set<double, 2> my_quad_tree;
     my_quad_tree.emplace({0.0, 0.0});
     my_quad_tree.emplace({1.0, 1.0});
 
