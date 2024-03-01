@@ -3002,8 +3002,6 @@ private:
                         .data};
             }
         }
-        inline auto      operator->() const { return this->operator(); }
-        inline auto      operator->() { return this->operator(); }
         inline iterator& operator++() {
             ++it_;
             return *this;
@@ -3051,8 +3049,8 @@ public:
 
     template <typename Func>
     void walk(Func func) const {
-        const std::function<void(uint64_t, const bounding_box<CoordinateType, Rank>&)> walk_recursively =
-            [&](auto node_index, auto boundary) {
+        const std::function<void(uint64_t, const bounding_box<CoordinateType, Rank>&)>
+            walk_recursively = [&](auto node_index, auto boundary) {
                 assert(node_index < nodes_.size());
                 const tree_node& node = nodes_[node_index];
                 func(boundary, node.is_a_leaf());
@@ -3176,6 +3174,24 @@ public:
         return {presence_.find(point), this};
     }
 
+    template <typename T = StorageType,
+              typename = typename std::enable_if<!std::is_void_v<T>>::type>
+    inline auto& operator[](std::array<CoordinateType, Rank> point) const {
+        auto it = find(point);
+        assert(it != end());
+
+        return std::get<1>(*it);
+    }
+
+    template <typename T = StorageType,
+              typename = typename std::enable_if<!std::is_void_v<T>>::type>
+    inline auto& operator[](std::array<CoordinateType, Rank> point) {
+        auto it = find(point);
+        assert(it != end());
+
+        return std::get<1>(*it);
+    }
+
     auto nearest(std::array<CoordinateType, Rank> point) {
         CoordinateType nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
         if constexpr (std::is_void_v<StorageType>) {
@@ -3242,18 +3258,18 @@ private:
         inline bool is_a_leaf() const { return !is_a_branch(); }
     };
 
-    inline void emplace_recursively_helper(uint64_t                            index_of_first_child,
+    inline void emplace_recursively_helper(uint64_t index_of_first_child,
                                            const bounding_box<CoordinateType, Rank>& boundary,
-                                           std::array<CoordinateType, Rank>    point,
-                                           uint64_t                            index = -1) {
+                                           std::array<CoordinateType, Rank>          point,
+                                           uint64_t                                  index = -1) {
         const auto [new_boundary, selected_quad] = boundary.recurse(point);
         emplace_recursively(index_of_first_child + selected_quad, new_boundary, point, index);
     }
 
-    void emplace_recursively(uint64_t                            node_index,
+    void emplace_recursively(uint64_t                                  node_index,
                              const bounding_box<CoordinateType, Rank>& boundary,
-                             std::array<CoordinateType, Rank>    point,
-                             uint64_t                            index = -1) {
+                             std::array<CoordinateType, Rank>          point,
+                             uint64_t                                  index = -1) {
         assert(node_index < nodes_.size());
         assert(boundary.contains(point));
 
@@ -3326,10 +3342,10 @@ private:
         node = tree_node();
     }
 
-    inline void erase_recursively(uint64_t                            node_index,
+    inline void erase_recursively(uint64_t                                  node_index,
                                   const bounding_box<CoordinateType, Rank>& boundary,
-                                  uint64_t                            parent_size_after_removal,
-                                  std::array<CoordinateType, Rank>    point) {
+                                  uint64_t                         parent_size_after_removal,
+                                  std::array<CoordinateType, Rank> point) {
         assert(node_index < nodes_.size());
 
         tree_node& node = nodes_[node_index];
@@ -3372,8 +3388,8 @@ private:
     template <typename Func, typename MaybeConstType>
     inline void find_recursively(const bounding_box<CoordinateType, Rank>& bbox,
                                  const bounding_box<CoordinateType, Rank>& boundary,
-                                 Func                                func,
-                                 uint64_t                            node_index) {
+                                 Func                                      func,
+                                 uint64_t                                  node_index) {
         assert(node_index < nodes_.size());
 
         tree_node& node = nodes_[node_index];
@@ -3401,11 +3417,11 @@ private:
     }
 
     template <typename MaybeConstType>
-    void nearest_recursively(uint64_t                            node_index,
+    void nearest_recursively(uint64_t                                  node_index,
                              const bounding_box<CoordinateType, Rank>& boundary,
-                             std::array<CoordinateType, Rank>    point,
-                             CoordinateType&                     nearest_distance_squared,
-                             std::vector<MaybeConstType>&        results) {
+                             std::array<CoordinateType, Rank>          point,
+                             CoordinateType&                           nearest_distance_squared,
+                             std::vector<MaybeConstType>&              results) {
         assert(node_index < nodes_.size());
 
         tree_node& node = nodes_[node_index];

@@ -264,9 +264,10 @@ TEST(TestSpatialTree, MutableAccesses) {
     auto                                    it = tree.emplace({0, 0}, 0).first;
     auto [coordinates, data1] = *it;
     ++data1;
+    ++tree[{0, 0}];
     auto it2 = tree.find({0, 0});
     auto [_, data2] = *it2;
-    ASSERT_EQ(data2, 1);
+    ASSERT_EQ(data2, 2);
 }
 
 TEST(TestSpatialTree, Destructors) {
