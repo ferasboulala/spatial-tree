@@ -2975,7 +2975,7 @@ private:
         using reference = value_type&;
 
     public:
-        inline iterator(auto it, auto tree) : it_(it), tree_(tree) {}
+        inline iterator(auto it, auto tree) noexcept : it_(it), tree_(tree) {}
         inline auto operator*() const {
             if constexpr (std::is_void_v<StorageType>) {
                 return *it_;
@@ -3015,13 +3015,16 @@ private:
     };
 
 public:
-    spatial_tree() { clear(); }
-    spatial_tree(const bounding_box<CoordinateType, Rank>& boundary) : boundary_(boundary) {
+    spatial_tree() noexcept { clear(); }
+    spatial_tree(const bounding_box<CoordinateType, Rank>& boundary) noexcept
+        : boundary_(boundary) {
         clear();
     }
-    spatial_tree(std::initializer_list<CoordinateType> boundary) : boundary_(boundary) { clear(); }
+    spatial_tree(std::initializer_list<CoordinateType> boundary) noexcept : boundary_(boundary) {
+        clear();
+    }
 
-    ~spatial_tree() = default;
+    ~spatial_tree() noexcept = default;
 
     inline void reserve(uint64_t capacity) {
         assert(capacity);
