@@ -20,8 +20,7 @@ int main() {
     }
 
     int counter = 0;
-    my_quad_tree.find(st::bounding_box<double, 2>({-5.0, -5.0, 5.0, 5.0}),
-                      [&](auto) { ++counter; });
+    my_quad_tree.find({-5.0, -5.0, 5.0, 5.0}, [&](auto) { ++counter; });
     if (counter != 2) {
         std::cerr << "Could not find all points that were added" << std::endl;
         return 3;
@@ -34,9 +33,14 @@ int main() {
     }
 
     auto coordinates = nearest_points.front();
-    if (coordinates[0] || coordinates[1]) {
+    if (coordinates[0] != 0 || coordinates[1] != 0) {
         std::cerr << "Should be <0, 0>" << std::endl;
         return 5;
+    }
+
+    if (!my_quad_tree.erase({0.0, 0.0})) {
+        std::cerr << "Could not erase <0, 0>" << std::endl;
+        return 6;
     }
 
     return 0;
