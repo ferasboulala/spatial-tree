@@ -1,33 +1,3 @@
-#pragma once
-
-#if ((defined(__GNUC__) || defined(__GNUG__)) && !defined(__clang__))
-#define __gnu_compiler
-#elif (defined(__clang__))
-#define __clang_compiler
-#endif
-
-#if defined(__gnu_compiler)
-#define __unroll_2 _Pragma("GCC unroll 2")
-#define __unroll_3 _Pragma("GCC unroll 3")
-#define __unroll_4 _Pragma("GCC unroll 4")
-#define __unroll_8 _Pragma("GCC unroll 8")
-#elif defined(__clang_compiler)
-#define __unroll_2 _Pragma("clang loop unroll_count(2)")
-#define __unroll_3 _Pragma("clang loop unroll_count(3)")
-#define __unroll_4 _Pragma("clang loop unroll_count(4)")
-#define __unroll_8 _Pragma("clang loop unroll_count(8)")
-#endif
-
-#include <cassert>
-#include <cmath>
-#include <cstdint>
-#include <functional>
-#include <initializer_list>
-#include <limits>
-#include <numeric>
-#include <tuple>
-#include <vector>
-
 // clang-format off
 
 // Copy pasted from: https://github.com/martinus/robin-hood-hashing with some slight modifications
@@ -2585,6 +2555,36 @@ using unordered_set = detail::Table<sizeof(Key) <= sizeof(size_t) * 6 &&
 
 // clang-format on
 
+#pragma once
+
+#if ((defined(__GNUC__) || defined(__GNUG__)) && !defined(__clang__))
+#define __gnu_compiler
+#elif (defined(__clang__))
+#define __clang_compiler
+#endif
+
+#if defined(__gnu_compiler)
+#define __unroll_2 _Pragma("GCC unroll 2")
+#define __unroll_3 _Pragma("GCC unroll 3")
+#define __unroll_4 _Pragma("GCC unroll 4")
+#define __unroll_8 _Pragma("GCC unroll 8")
+#elif defined(__clang_compiler)
+#define __unroll_2 _Pragma("clang loop unroll_count(2)")
+#define __unroll_3 _Pragma("clang loop unroll_count(3)")
+#define __unroll_4 _Pragma("clang loop unroll_count(4)")
+#define __unroll_8 _Pragma("clang loop unroll_count(8)")
+#endif
+
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <functional>
+#include <initializer_list>
+#include <limits>
+#include <numeric>
+#include <tuple>
+#include <vector>
+
 namespace st {
 
 namespace internal {
@@ -3037,17 +3037,30 @@ public:
     inline uint64_t capacity() const {
         return nodes_.capacity() / BranchingFactor * MaximumNodeSize;
     }
+    inline uint64_t volume() const { return nodes_.size(); }
     inline uint64_t size() const { return presence_.size(); }
-    inline bool     empty() const { return size() == 0; }
-    inline void     clear() {
-            nodes_.clear();
-            nodes_.resize(1);
-            freed_nodes_.clear();
-            if constexpr (!std::is_void_v<StorageType>) {
-                storage_.vec.clear();
-                pool_.vec.clear();
+    inline uint64_t bsize() const {
+        uint64_t bytes = sizeof(boundary_) + sizeof(tree_node) * nodes_.size() +
+                         sizeof(uint64_t) * freed_nodes_.size();
+        if (!std::is_void_v<StorageType>) {
+            bytes +=
+                sizeof(typename storage_container_full::storage_data) * storage_.vec.size() +
+                sizeof(uint64_t) * pool_.vec.size() +
+                presence_.size() * (sizeof(std::array<CoordinateType, Rank>) + sizeof(uint64_t));
         }
-            presence_.clear();
+
+        return bytes;
+    }
+    inline bool empty() const { return size() == 0; }
+    inline void clear() {
+        nodes_.clear();
+        nodes_.resize(1);
+        freed_nodes_.clear();
+        if constexpr (!std::is_void_v<StorageType>) {
+            storage_.vec.clear();
+            pool_.vec.clear();
+        }
+        presence_.clear();
     }
 
     template <typename Func>

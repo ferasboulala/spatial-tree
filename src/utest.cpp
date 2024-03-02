@@ -351,6 +351,48 @@ TEST(TestSpatialTree, Octree) {
     ASSERT_EQ(nearest.size(), 1);
 }
 
+TEST(TestSpatialTree, VolumeAndBSize) {
+    st::internal::spatial_tree<int, int, 3> tree;
+
+    uint64_t volume = 0;
+    uint64_t bsize = 0;
+    for (int i = 0; i < 10000; ++i) {
+        ASSERT_GE(tree.volume(), volume);
+        ASSERT_GE(tree.bsize(), bsize);
+        volume = tree.volume();
+        tree.emplace({i, i, -i}, i);
+        ASSERT_GE(tree.volume(), volume);
+        ASSERT_GE(tree.bsize(), bsize);
+        volume = tree.volume();
+        tree.emplace({-i, i, i}, i);
+        ASSERT_GE(tree.volume(), volume);
+        ASSERT_GE(tree.bsize(), bsize);
+        volume = tree.volume();
+        tree.emplace({i, -i, i}, i);
+        ASSERT_GE(tree.volume(), volume);
+        ASSERT_GE(tree.bsize(), bsize);
+        volume = tree.volume();
+    }
+
+    for (int i = 0; i < 10000; ++i) {
+        ASSERT_LE(tree.volume(), volume);
+        ASSERT_GE(tree.bsize(), bsize);
+        volume = tree.volume();
+        tree.erase({i, i, -i});
+        ASSERT_LE(tree.volume(), volume);
+        ASSERT_GE(tree.bsize(), bsize);
+        volume = tree.volume();
+        tree.erase({-i, i, i});
+        ASSERT_LE(tree.volume(), volume);
+        ASSERT_GE(tree.bsize(), bsize);
+        volume = tree.volume();
+        tree.erase({i, -i, i});
+        ASSERT_LE(tree.volume(), volume);
+        ASSERT_GE(tree.bsize(), bsize);
+        volume = tree.volume();
+    }
+}
+
 TEST(TestSpatialTree, UniqueInsertions) {
     const auto typed_test = [&]<typename CoordT>() {
         const std::vector<uint64_t> test_sizes = {1, 2, 3, 7, 10, 100, 1000};
