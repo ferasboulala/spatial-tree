@@ -26,7 +26,7 @@ if (${GTest_FOUND})
      add_test(${test_name} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${test_name}")
    endfunction()
 
-   create_test("utest" src/utest.cpp)
+   create_test("utest" spatial-tree/utest.cpp)
 endif()
 
 find_package(benchmark CONFIG)
@@ -41,10 +41,11 @@ if (${benchmark_FOUND})
      target_link_libraries(${benchmark_name} benchmark::benchmark)
    endfunction()
  
-   create_benchmark("bench" src/bench.cpp)
+   create_benchmark("bench" spatial-tree/bench.cpp)
 endif()
 
-add_executable("example" src/example.cpp)
+add_executable("example" examples/example.cpp)
+target_include_directories("example" PUBLIC "${CMAKE_SOURCE_DIR}/spatial-tree")
 
 find_package(OpenCV)
 if (DEFINED OpenCV_LIBRARIES)
@@ -53,11 +54,11 @@ if (DEFINED OpenCV_LIBRARIES)
     target_include_directories(
       ${target_name}
       PUBLIC
-      ${CMAKE_SOURCE_DIR}
+      ${CMAKE_SOURCE_DIR}/spatial-tree
       ${OpenCV_INCLUDE_DIRS})
     target_link_libraries(
       ${target_name}
       ${OpenCV_LIBRARIES})
   endfunction()
-  create_binary("interactive" src/interactive.cpp)
+  create_binary("interactive" examples/interactive.cpp)
 endif()
