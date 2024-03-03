@@ -3037,7 +3037,7 @@ public:
     inline uint64_t capacity() const {
         return nodes_.capacity() / BranchingFactor * MaximumNodeSize;
     }
-    inline uint64_t volume() const { return nodes_.size(); }
+    inline uint64_t volume() const { return nodes_.size() - BranchingFactor * freed_nodes_.size(); }
     inline uint64_t size() const { return presence_.size(); }
     inline uint64_t bsize() const {
         uint64_t bytes = sizeof(boundary_) + sizeof(tree_node) * nodes_.size() +
@@ -3193,19 +3193,19 @@ public:
     template <typename T = StorageType,
               typename = typename std::enable_if<!std::is_void_v<T>>::type>
     inline auto& operator[](std::array<CoordinateType, Rank> point) const {
-        auto it = find(point);
-        assert(it != end());
+        auto it = emplace(point);
+        assert(it.first != end());
 
-        return std::get<1>(*it);
+        return std::get<1>(*it.first);
     }
 
     template <typename T = StorageType,
               typename = typename std::enable_if<!std::is_void_v<T>>::type>
     inline auto& operator[](std::array<CoordinateType, Rank> point) {
-        auto it = find(point);
-        assert(it != end());
+        auto it = emplace(point);
+        assert(it.first != end());
 
-        return std::get<1>(*it);
+        return std::get<1>(*it.first);
     }
 
     auto nearest(std::array<CoordinateType, Rank> point) {

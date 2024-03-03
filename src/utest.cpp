@@ -351,7 +351,7 @@ TEST(TestSpatialTree, Octree) {
     ASSERT_EQ(nearest.size(), 1);
 }
 
-TEST(TestSpatialTree, VolumeAndBSize) {
+TEST(TestSpatialTree, IncreasingVolumeAndBSize) {
     st::internal::spatial_tree<int, int, 3> tree;
 
     uint64_t volume = 0;
@@ -391,6 +391,29 @@ TEST(TestSpatialTree, VolumeAndBSize) {
         ASSERT_GE(tree.bsize(), bsize);
         volume = tree.volume();
     }
+}
+
+TEST(TestSpatialTree, VolumeTracking) {
+    st::internal::spatial_tree<int, void, 2, 1> tree = {-2, -2, 2, 2};
+    ASSERT_EQ(tree.volume(), 1);
+    tree.clear();
+    ASSERT_EQ(tree.volume(), 1);
+    ASSERT_TRUE(tree.emplace({0, 0}).second);
+    ASSERT_EQ(tree.volume(), 1);
+    ASSERT_FALSE(tree.emplace({0, 0}).second);
+    ASSERT_EQ(tree.volume(), 1);
+    ASSERT_TRUE(tree.emplace({1, 1}).second);
+    ASSERT_EQ(tree.volume(), 1 + 4);
+    ASSERT_FALSE(tree.emplace({1, 1}).second);
+    ASSERT_EQ(tree.volume(), 1 + 4);
+    ASSERT_TRUE(tree.emplace({2, 2}).second);
+    ASSERT_EQ(tree.volume(), 1 + 4 + 4);
+    ASSERT_TRUE(tree.erase({0, 0}));
+    ASSERT_EQ(tree.volume(), 1 + 4 + 4);
+    ASSERT_TRUE(tree.erase({2, 2}));
+    ASSERT_EQ(tree.volume(), 1);
+    ASSERT_TRUE(tree.erase({1, 1}));
+    ASSERT_EQ(tree.volume(), 1);
 }
 
 TEST(TestSpatialTree, UniqueInsertions) {
