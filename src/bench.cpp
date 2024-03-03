@@ -60,6 +60,7 @@ void benchmark_insertions(benchmark::State &state, TreeType &tree) {
             n_points_inserted += inserted;
             n_collisions += (1 - inserted);
         }
+        benchmark::ClobberMemory();
     }
     state.counters["volume"] = tree.volume();
     state.counters["memory"] = tree.bsize();
@@ -95,6 +96,7 @@ void benchmark_deletions(benchmark::State &state, TreeType &tree) {
             tree.erase({x, y});
             tree.erase({x_, y_});
         }
+        benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(test_size * 2 * state.iterations());
 }
@@ -139,6 +141,7 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
         for (const auto &bbox : bounding_boxes) {
             tree.find(bbox, [&](const auto) { ++n_points_found; });
         }
+        benchmark::ClobberMemory();
     }
     state.counters["found"] = n_points_found / state.iterations() / n_bounding_boxes;
     state.SetItemsProcessed(n_bounding_boxes * state.iterations());
@@ -171,6 +174,7 @@ void benchmark_find_single(benchmark::State &state, TreeType &tree) {
         for (auto [x, y] : points_to_find) {
             tree.find({x, y});
         }
+        benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(n_points_to_find * state.iterations());
 }
@@ -200,6 +204,7 @@ void benchmark_nearest(benchmark::State &state, TreeType &tree) {
         for (auto [x, y] : query_points) {
             n_points_found += tree.nearest({x, y}).size();
         }
+        benchmark::ClobberMemory();
     }
     state.counters["found"] = n_points_found / state.iterations();
     state.SetItemsProcessed(n_queries * state.iterations());
