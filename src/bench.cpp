@@ -15,7 +15,7 @@ static constexpr uint64_t LOW = 1 << 10;
 static constexpr uint64_t HIGH = 1 << 22;
 
 struct opaque_data {
-    char opaque[sizeof(void*)];
+    char opaque[sizeof(void *)];
     opaque_data() {}
 };
 static constexpr uint64_t MAX_NODE_SIZE = 256;
@@ -51,14 +51,18 @@ void benchmark_insertions(benchmark::State &state, TreeType &tree) {
     uint64_t n_collisions = 0;
     tree.reserve(test_size);
     for (auto _ : state) {
+        state.PauseTiming();
+        tree.clear();
+        state.ResumeTiming();
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
             bool inserted = tree.emplace({x, y}).second;
             n_points_inserted += inserted;
             n_collisions += (1 - inserted);
         }
-        tree.clear();
     }
+    state.counters["volume"] = tree.volume();
+    state.counters["memory"] = tree.bsize();
     state.counters["inserted"] = n_points_inserted / state.iterations();
     state.counters["collisions"] = n_collisions / state.iterations();
     state.SetItemsProcessed(test_size * state.iterations());

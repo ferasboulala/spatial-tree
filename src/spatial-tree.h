@@ -3042,7 +3042,9 @@ public:
     inline uint64_t bsize() const {
         uint64_t bytes = sizeof(boundary_) + sizeof(tree_node) * nodes_.size() +
                          sizeof(uint64_t) * freed_nodes_.size();
-        if (!std::is_void_v<StorageType>) {
+        if constexpr (std::is_void_v<StorageType>) {
+            bytes += presence_.size() * (sizeof(std::array<CoordinateType, Rank>));
+        } else {
             bytes +=
                 sizeof(typename storage_container_full::storage_data) * storage_.vec.size() +
                 sizeof(uint64_t) * pool_.vec.size() +
