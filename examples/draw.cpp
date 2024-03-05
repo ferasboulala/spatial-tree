@@ -1,18 +1,18 @@
-#include <limits>
-#include <opencv2/opencv.hpp>
+#include <raylib.h>
+
+#include <algorithm>
 
 #include "spatial-tree.h"
+
+#if 0
 
 static constexpr int     LINE_THICKNESS = 1;
 static constexpr uint8_t MAXIMUM_NODE_SIZE = 1;
 static const char       *window_name = "canvas";
 
-#define DRAW
-#ifdef DRAW
 static constexpr int                               CANVAS_HEIGHT = 1500;
 static constexpr int                               POINT_RADIUS = 10;
 static constexpr int                               CANVAS_WIDTH = 2500;
-static cv::Mat                                     canvas;
 static st::spatial_set<int, 2, MAXIMUM_NODE_SIZE> *points;
 
 void mouse_callback(int event, int x, int y, int, void *) {
@@ -67,44 +67,59 @@ int main() {
 
     return 0;
 }
-
 #else
 
-#include <string>
-int main(int, char **argv) {
-    const std::string input_filename(argv[1]);
-    const std::string output_filename(argv[2]);
-    auto              map = cv::imread(input_filename, cv::IMREAD_GRAYSCALE);
-    cv::threshold(map, map, 128, std::numeric_limits<uint8_t>::max(), cv::THRESH_BINARY);
+int main() {
+    static constexpr uint64_t WindowWidth = 800;
+    static constexpr uint64_t WindowHeight = 600;
 
-    st::spatial_set<int, MAXIMUM_NODE_SIZE> points({0, map.cols, map.rows, 0});
-    for (int i = 0; i < map.rows; ++i) {
-        for (int j = 0; j < map.cols; ++j) {
-            if (!map.at<uint8_t>(i, j)) {
-                points.emplace(i, j);
-            }
+    st::spatial_set<int32_t, 2, 1> quadtree({0, 0, WindowWidth, WindowHeight});
+
+    InitWindow(WindowWidth, WindowHeight, "draw");
+    SetTargetFPS(144);
+
+    BeginDrawing();
+    ClearBackground(RAYWHITE);
+    EndDrawing();
+
+    while (!WindowShouldClose()) {
+        // TODO: Follow the steps here to speed up drawing:
+        // https://www.reddit.com/r/raylib/comments/i6mkh0/only_clear_background_once/
+        BeginDrawing();
+        ClearBackground(RAYWHITE);
+        for (auto [x, y] : quadtree) {
+            DrawCircle(x, y, 2, GREEN);
         }
+        int         fps = GetFPS();
+        std::string fps_str = std::to_string(fps);
+        DrawText(fps_str.c_str(), 10, 10, 20, DARKGRAY);
+
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            auto mouse_position = GetMousePosition();
+            quadtree.emplace({int32_t(mouse_position.x), int32_t(mouse_position.y)});
+        } else if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+            auto                     mouse_position = GetMousePosition();
+            static constexpr int32_t EraserRadius = 20;
+
+            int32_t min_x = std::max<int32_t>(0, mouse_position.x - EraserRadius);
+            int32_t max_x = std::min<int32_t>(WindowWidth, mouse_position.x + EraserRadius);
+            int32_t min_y = std::max<int32_t>(0, mouse_position.y - EraserRadius);
+            int32_t max_y = std::min<int32_t>(WindowHeight, mouse_position.y + EraserRadius);
+
+            std::vector<std::array<int32_t, 2> > points_to_erase;
+            quadtree.find({min_x, min_y, max_x, max_y},
+                          [&](auto it) { points_to_erase.push_back(it); });
+            for (auto point : points_to_erase) {
+                quadtree.erase(point);
+            }
+#define LIGHT_BEIGE \
+    CLITERAL(Color) { 200, 176, 131, 255 }
+            DrawRectangle(min_x, min_y, 2 * EraserRadius, 2 * EraserRadius, LIGHT_BEIGE);
+        }
+        EndDrawing();
     }
 
-    cv::Mat color_map;
-    cv::cvtColor(map, color_map, cv::COLOR_GRAY2RGB);
-
-    points.walk([&](auto boundaries, bool is_leaf) {
-        if (is_leaf) return;
-        auto [top_x, top_y, bottom_x, bottom_y] = boundaries;
-        auto mid_x = (top_x + bottom_x) / 2;
-        auto mid_y = (top_y + bottom_y) / 2;
-
-        cv::line(color_map, {bottom_y, mid_x}, {top_y, mid_x}, {0, 128, 0}, LINE_THICKNESS);
-        cv::line(color_map, {mid_y, top_x}, {mid_y, bottom_x}, {0, 128, 0}, LINE_THICKNESS);
-    });
-
-    cv::namedWindow(window_name);
-    cv::imshow(window_name, color_map);
-    cv::waitKey(0);
-
-    cv::imwrite(output_filename, color_map);
-
+    CloseWindow();
     return 0;
 }
 

@@ -44,21 +44,22 @@ if (${benchmark_FOUND})
    create_benchmark("bench" spatial-tree/bench.cpp)
 endif()
 
-add_executable("example" examples/example.cpp)
-target_include_directories("example" PUBLIC "${CMAKE_SOURCE_DIR}/spatial-tree")
+add_executable("api" examples/api.cpp)
+target_include_directories("api" PUBLIC "${CMAKE_SOURCE_DIR}/spatial-tree")
 
-find_package(OpenCV)
-if (DEFINED OpenCV_LIBRARIES)
+find_package(raylib)
+if (DEFINED raylib_FOUND)
+  message(DEBUG ${INCLUDE_DIRECTORIES})
   function(create_binary target_name entry_point)
     add_executable(${target_name} ${entry_point})
     target_include_directories(
       ${target_name}
       PUBLIC
-      ${CMAKE_SOURCE_DIR}/spatial-tree
-      ${OpenCV_INCLUDE_DIRS})
+      ${CMAKE_SOURCE_DIR}/spatial-tree)
     target_link_libraries(
       ${target_name}
-      ${OpenCV_LIBRARIES})
+      raylib)
   endfunction()
-  create_binary("interactive" examples/interactive.cpp)
+  create_binary("draw" examples/draw.cpp)
+  create_binary("n-body" examples/n-body.cpp)
 endif()
