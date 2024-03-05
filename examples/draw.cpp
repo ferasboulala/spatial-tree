@@ -76,7 +76,7 @@ int main() {
     st::spatial_set<int32_t, 2, 1> quadtree({0, 0, WindowWidth, WindowHeight});
 
     InitWindow(WindowWidth, WindowHeight, "draw");
-    SetTargetFPS(144);
+    SetTargetFPS(60);
 
     BeginDrawing();
     ClearBackground(RAYWHITE);
@@ -88,15 +88,18 @@ int main() {
         BeginDrawing();
         ClearBackground(RAYWHITE);
         for (auto [x, y] : quadtree) {
-            DrawCircle(x, y, 2, GREEN);
+            DrawCircle(x, y, 1, GREEN);
         }
-        int         fps = GetFPS();
-        std::string fps_str = std::to_string(fps);
-        DrawText(fps_str.c_str(), 10, 10, 20, DARKGRAY);
+        DrawFPS(10, 10);
+        std::string size_str = std::to_string(quadtree.size());
+        DrawText(size_str.c_str(), 10, 30, 10, DARKGRAY);
 
         if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
             auto mouse_position = GetMousePosition();
-            quadtree.emplace({int32_t(mouse_position.x), int32_t(mouse_position.y)});
+            if (mouse_position.x >= 0 && mouse_position.y > 0 && mouse_position.x < WindowWidth &&
+                mouse_position.y < WindowHeight) {
+                quadtree.emplace({int32_t(mouse_position.x), int32_t(mouse_position.y)});
+            }
         } else if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
             auto                     mouse_position = GetMousePosition();
             static constexpr int32_t EraserRadius = 20;

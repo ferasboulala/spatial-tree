@@ -2747,7 +2747,6 @@ inline bool intervals_overlap(CoordinateType lhs_beg,
 
 }  // namespace internal
 
-// When replacing the other bounding_box, be sure to check operand order.
 template <typename CoordinateType, uint64_t Rank>
 struct bounding_box {
     static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8);
@@ -3065,6 +3064,31 @@ public:
         presence_.clear();
     }
 
+    struct walker {
+    public:
+        walker(tree_node& node, const bounding_box<CoordinateType, Rank>& boundary)
+            : node_(node), boundary_(boundary) {}
+        walker(const Walker&& other) = default;
+        ~walker() = default;
+
+        walker() = delete;
+        walker(Walker&& other) = delete;
+
+        uint64_t size() const { return node_.size(); }
+
+        const bounding_box<CoordinateType, Rank>& boundary() const { return boundary_; }
+
+        void recurse(uint64_t branch);
+        bool terminal() const { return node_.is_a_leaf(); }
+
+        auto operator[](uint64_t idx);
+        auto operator[](uint64_t idx) const;
+
+    private:
+        tree_node&                         node_;
+        bounding_box<CoordinateType, Rank> boundary_;
+    };
+
     template <typename Func>
     void walk(Func func) const {
         const std::function<void(uint64_t, const bounding_box<CoordinateType, Rank>&)>
@@ -3272,8 +3296,15 @@ private:
         bool is_branch;
 
         inline tree_node() noexcept : leaf(), is_branch(false) {}
-        inline bool is_a_branch() const { return is_branch; }
-        inline bool is_a_leaf() const { return !is_a_branch(); }
+        inline bool     is_a_branch() const { return is_branch; }
+        inline bool     is_a_leaf() const { return !is_a_branch(); }
+        inline uint64_t size() const {
+            if (is_a_branch()) {
+                return branch.size;
+            } else {
+                return leaf.size;
+            }
+        }
     };
 
     inline void emplace_recursively_helper(uint64_t index_of_first_child,
