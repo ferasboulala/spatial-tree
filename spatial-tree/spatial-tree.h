@@ -3064,31 +3064,6 @@ public:
         presence_.clear();
     }
 
-    struct walker {
-    public:
-        walker(tree_node& node, const bounding_box<CoordinateType, Rank>& boundary)
-            : node_(node), boundary_(boundary) {}
-        walker(const Walker&& other) = default;
-        ~walker() = default;
-
-        walker() = delete;
-        walker(Walker&& other) = delete;
-
-        uint64_t size() const { return node_.size(); }
-
-        const bounding_box<CoordinateType, Rank>& boundary() const { return boundary_; }
-
-        void recurse(uint64_t branch);
-        bool terminal() const { return node_.is_a_leaf(); }
-
-        auto operator[](uint64_t idx);
-        auto operator[](uint64_t idx) const;
-
-    private:
-        tree_node&                         node_;
-        bounding_box<CoordinateType, Rank> boundary_;
-    };
-
     template <typename Func>
     void walk(Func func) const {
         const std::function<void(uint64_t, const bounding_box<CoordinateType, Rank>&)>
