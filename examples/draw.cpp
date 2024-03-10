@@ -11,7 +11,7 @@ int main() {
     st::spatial_set<int32_t, 2, 1> quadtree({0, 0, WindowWidth, WindowHeight});
 
     InitWindow(WindowWidth, WindowHeight, "draw");
-    // SetTargetFPS(60);
+    SetTargetFPS(60);
 
     BeginDrawing();
     ClearBackground(RAYWHITE);
