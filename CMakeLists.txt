@@ -62,6 +62,7 @@ if (NOT USE_EMSCRIPTEN)
   enable_testing()
   function(create_test test_name entry_point)
     add_executable(${test_name} ${entry_point})
+    target_include_directories(${test_name} PUBLIC ${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
     target_include_directories(
       ${test_name}
       PUBLIC
@@ -81,6 +82,7 @@ if (NOT USE_EMSCRIPTEN)
       ${benchmark_name}
       PUBLIC
       ${CMAKE_SOURCE_DIR}
+      ${benchmark_SOURCE_DIR}/include
      )
      target_link_libraries(${benchmark_name} benchmark)
    endfunction()

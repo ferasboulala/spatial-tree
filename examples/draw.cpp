@@ -5,8 +5,8 @@
 #include "spatial-tree.h"
 
 int main() {
-    static constexpr uint64_t WindowWidth = 1200;
-    static constexpr uint64_t WindowHeight = 1200;
+    static constexpr uint64_t WindowWidth = 800;
+    static constexpr uint64_t WindowHeight = 800;
 
     st::spatial_set<int32_t, 2, 1> quadtree({0, 0, WindowWidth, WindowHeight});
 
@@ -26,8 +26,7 @@ int main() {
             DrawCircle(x, y, 2, GREEN);
         }
         quadtree.walk([&](auto bbox, bool terminal) {
-            if (terminal)
-                return;
+            if (terminal) return;
 
             auto [x, y] = bbox.origin();
             DrawLine(x, bbox.starts[1], x, bbox.stops[1], GRAY);
@@ -36,6 +35,7 @@ int main() {
         DrawFPS(10, 10);
         std::string size_str = std::to_string(quadtree.size());
         DrawText(size_str.c_str(), 10, 30, 10, DARKGRAY);
+        DrawText("Left click to draw, right to erase, C to clear", 10, 40, 10, DARKGRAY);
 
         if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
             auto mouse_position = GetMousePosition();
@@ -58,9 +58,10 @@ int main() {
             for (auto point : points_to_erase) {
                 quadtree.erase(point);
             }
-#define LIGHT_BEIGE \
-    CLITERAL(Color) { 200, 176, 131, 255 }
-            DrawRectangle(min_x, min_y, 2 * EraserRadius, 2 * EraserRadius, LIGHT_BEIGE);
+#define LIGHT_BEIGE CLITERAL(Color){200, 176, 131, 255}
+            DrawRectangle(min_x, min_y, 2 * EraserRadius, 2 * EraserRadius, BLUE);
+        } else if (IsKeyReleased(KEY_C)) {
+            quadtree.clear();
         }
         EndDrawing();
     }
