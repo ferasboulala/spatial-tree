@@ -59,21 +59,21 @@ if (NOT USE_EMSCRIPTEN)
   )
   FetchContent_MakeAvailable(googletest benchmark)
 
-  # enable_testing()
-  # function(create_test test_name entry_point)
-  #   add_executable(${test_name} ${entry_point})
-  #   target_include_directories(
-  #     ${test_name}
-  #     PUBLIC
-  #     ${CMAKE_SOURCE_DIR}
-  #     # Temporary, for Mac.
-  #     /usr/local/include/
-  #    )
-  #    target_link_libraries(${test_name} gtest gtest_main)
-  #    add_test(${test_name} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${test_name}")
-  #  endfunction()
+  enable_testing()
+  function(create_test test_name entry_point)
+    add_executable(${test_name} ${entry_point})
+    target_include_directories(
+      ${test_name}
+      PUBLIC
+      ${CMAKE_SOURCE_DIR}
+      # Temporary, for Mac.
+      /usr/local/include/
+     )
+     target_link_libraries(${test_name} gtest gtest_main)
+     add_test(${test_name} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${test_name}")
+   endfunction()
 
-  #  create_test("utest" spatial-tree/utest.cpp)
+   create_test("utest" spatial-tree/utest.cpp)
 
   function(create_benchmark benchmark_name entry_point)
     add_executable(${benchmark_name} ${entry_point})
@@ -100,9 +100,7 @@ function(create_binary target_name entry_point)
     )
 endfunction()
 
-if (USE_EMSCRIPTEN)
-  # message(WARNING "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
-  create_binary("draw" examples/draw.cpp)
-else()
+create_binary("draw" examples/draw.cpp)
+if (NOT USE_EMSCRIPTEN)
   create_binary("n-body" examples/n-body.cpp)
 endif()

@@ -23,7 +23,7 @@ int main() {
         BeginDrawing();
         ClearBackground(RAYWHITE);
         for (auto [x, y] : quadtree) {
-            DrawCircle(x, y, 1, GREEN);
+            DrawCircle(x, y, 2, GREEN);
         }
         quadtree.walk([&](auto bbox, bool terminal) {
             if (terminal)
