@@ -1,5 +1,6 @@
 bin
 build
+build-web
 .*sw*
 .vscode
 perf.*
