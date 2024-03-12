@@ -2,37 +2,43 @@ cmake_minimum_required(VERSION 3.0)
 
 project(spatial-tree)
 
+# Set compiler and linker flags for web.
 if (USE_EMSCRIPTEN STREQUAL "1")
   set(USE_EMSCRIPTEN TRUE)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s USE_GLFW=3 -s ASSERTIONS=1 -s WASM=1 -s ASYNCIFY")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s USE_GLFW=3 -s ASSERTIONS=1 -s WASM=1 -s ASYNCIFY")
-  set(CMAKE_EXECUTABLE_SUFFIX ".html")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s USE_GLFW=3 -s ASSERTIONS=1 -s WASM=1 -DPLATFORM_WEB")
 else()
   set(USE_EMSCRIPTEN FALSE)
 endif()
 
-# Do not use -ffast-math because it will break floating point correctness. Use it only if coordinate types are integers.
+# Set compiler flags.
 if (USE_EMSCRIPTEN)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s USE_GLFW=3 -s ASSERTIONS=1 -s WASM=1 -s ASYNCIFY")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s USE_GLFW=3 -s ASSERTIONS=1 -s WASM=1 -s ASYNCIFY")
+  set(CMAKE_EXECUTABLE_SUFFIX ".html")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s USE_GLFW=3 -s ASSERTIONS=1 -s WASM=1 -DPLATFORM_WEB")
   add_compile_options(-O3)
 else()
+  # Do not use -ffast-math because it will break floating point correctness. Use it only if coordinate types are integers.
   add_compile_options(-O3 -march=native -Wall -Wextra -fverbose-asm)
 endif()
+
+# Set C++ standard and output directories.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(ALL_LIBRARIES)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../bin/")
 
+# Build the API example when not compiling for web.
 if (NOT USE_EMSCRIPTEN)
   add_executable("api" examples/api.cpp)
   target_include_directories("api" PUBLIC "${CMAKE_SOURCE_DIR}/spatial-tree")
 endif()
 
 include(FetchContent)
-
-find_package(raylib 5.0 QUIET) # QUIET or REQUIRED
-if (NOT raylib_FOUND) # If there's none, fetch and build raylib
+ # QUIET or REQUIRED
+find_package(raylib 5.0 QUIET)
+ # If there's none, fetch and build raylib
+if (NOT raylib_FOUND)
   include(FetchContent)
   FetchContent_Declare(
     raylib
@@ -42,14 +48,17 @@ if (NOT raylib_FOUND) # If there's none, fetch and build raylib
     GIT_SHALLOW 1
   )
   FetchContent_GetProperties(raylib)
-  if (NOT raylib_POPULATED) # Have we downloaded raylib yet?
+   # Have we downloaded raylib yet?
+  if (NOT raylib_POPULATED)
     set(FETCHCONTENT_QUIET NO)
     FetchContent_Populate(raylib)
-    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE) # don't build the supplied examples
+     # don't build the supplied examples
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     add_subdirectory(${raylib_SOURCE_DIR} ${raylib_BINARY_DIR})
   endif()
 endif()
 
+# Fetch googletest and benchmark if not build for web.
 if (NOT USE_EMSCRIPTEN)
   FetchContent_Declare(
     googletest
@@ -105,6 +114,3 @@ function(create_binary target_name entry_point)
 endfunction()
 
 create_binary("draw" examples/draw.cpp)
-if (NOT USE_EMSCRIPTEN)
-  create_binary("n-body" examples/n-body.cpp)
-endif()

@@ -26,7 +26,9 @@ int main() {
             DrawCircle(x, y, 2, GREEN);
         }
         quadtree.walk([&](auto bbox, bool terminal) {
-            if (terminal) return;
+            if (terminal) {
+                return;
+            }
 
             auto [x, y] = bbox.origin();
             DrawLine(x, bbox.starts[1], x, bbox.stops[1], GRAY);
