@@ -9,7 +9,7 @@ Header only, no-dependency spatial partitioning data structure (a Quadtree in th
 Copy `spatial-tree.h` in your project and include it.
 
 ## Examples
-See `example.cpp` and `interactive.cpp`.
+See `example.cpp` and `draw.cpp` for an interactive demo.
 
 ## TODO
 - [ ] ND rank (currently 2D only).
