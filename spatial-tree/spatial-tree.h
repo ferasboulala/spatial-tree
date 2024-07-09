@@ -3516,7 +3516,8 @@ template <typename CoordinateType,
           typename StorageType,
           uint64_t Rank,
           uint16_t MaximumNodeSize = 64>
-class spatial_map : public internal::spatial_tree<CoordinateType, StorageType, MaximumNodeSize> {
+class spatial_map
+    : public internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize> {
 public:
     static_assert(!std::is_void_v<StorageType>, "For no storage type, use st::spatial_set");
     spatial_map() : internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize>() {}
