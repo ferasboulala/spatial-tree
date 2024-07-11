@@ -2964,6 +2964,8 @@ private:
                                   uint64_t,
                                   internal::point_hash<CoordinateType, Rank>,
                                   internal::point_equal<CoordinateType, Rank>>>::type;
+public:
+    using coordinate_type = std::array<CoordinateType, Rank>;
 
     template <typename MaybeConstType>
     struct iterator {
@@ -3001,6 +3003,9 @@ private:
                         .data};
             }
         }
+        inline auto operator->() {
+            return this->operator*();
+        }
         inline iterator& operator++() {
             ++it_;
             return *this;
@@ -3013,7 +3018,6 @@ private:
         const spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize>* tree_;
     };
 
-public:
     spatial_tree() noexcept { clear(); }
     spatial_tree(const bounding_box<CoordinateType, Rank>& boundary) noexcept
         : boundary_(boundary) {
