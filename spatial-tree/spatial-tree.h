@@ -2964,6 +2964,7 @@ private:
                                   uint64_t,
                                   internal::point_hash<CoordinateType, Rank>,
                                   internal::point_equal<CoordinateType, Rank>>>::type;
+
 public:
     using coordinate_type = std::array<CoordinateType, Rank>;
 
@@ -2976,7 +2977,10 @@ public:
         using reference = value_type&;
 
     public:
-        inline iterator(auto it, auto tree) noexcept : it_(it), tree_(tree) {}
+        inline iterator(
+            MaybeConstType                                                          it,
+            const spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize>* tree) noexcept
+            : it_(it), tree_(tree) {}
         inline auto operator*() const {
             if constexpr (std::is_void_v<StorageType>) {
                 return *it_;
@@ -3003,9 +3007,7 @@ public:
                         .data};
             }
         }
-        inline auto operator->() {
-            return this->operator*();
-        }
+        inline auto      get() { return this->operator*(); }
         inline iterator& operator++() {
             ++it_;
             return *this;
@@ -3122,7 +3124,7 @@ public:
             auto& [_, idx] = *it;
 
             if (!inserted) {
-                return {iterator<typename hash_table_type::iterator>{it, this}, false};
+                return {iterator<typename hash_table_type::iterator>(it, this), false};
             }
 
             if (pool_.vec.empty()) {
