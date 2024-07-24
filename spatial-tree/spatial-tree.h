@@ -3132,7 +3132,7 @@ public:
             } else {
                 idx = pool_.vec.back();
                 new (&storage_.vec[idx])
-                    storage_container_full::storage_data(std::forward<Args>(args)...);
+                    typename storage_container_full::storage_data(std::forward<Args>(args)...);
                 pool_.vec.pop_back();
             }
 
