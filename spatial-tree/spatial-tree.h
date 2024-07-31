@@ -3199,15 +3199,6 @@ public:
 
     template <typename T = StorageType,
               typename = typename std::enable_if<!std::is_void_v<T>>::type>
-    inline auto& operator[](std::array<CoordinateType, Rank> point) const {
-        auto it = emplace(point);
-        assert(it.first != end());
-
-        return std::get<1>(*it.first);
-    }
-
-    template <typename T = StorageType,
-              typename = typename std::enable_if<!std::is_void_v<T>>::type>
     inline auto& operator[](std::array<CoordinateType, Rank> point) {
         auto it = emplace(point);
         assert(it.first != end());
