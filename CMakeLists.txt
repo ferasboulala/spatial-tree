@@ -34,43 +34,15 @@ if (NOT USE_EMSCRIPTEN)
   target_include_directories("api" PUBLIC "${CMAKE_SOURCE_DIR}/spatial-tree")
 endif()
 
-include(FetchContent)
- # QUIET or REQUIRED
-find_package(raylib 5.0 QUIET)
- # If there's none, fetch and build raylib
-if (NOT raylib_FOUND)
-  include(FetchContent)
-  FetchContent_Declare(
-    raylib
-    GIT_REPOSITORY https://github.com/raysan5/raylib.git
-    GIT_TAG master
-    GIT_PROGRESS TRUE
-    GIT_SHALLOW 1
-  )
-  FetchContent_GetProperties(raylib)
-   # Have we downloaded raylib yet?
-  if (NOT raylib_POPULATED)
-    set(FETCHCONTENT_QUIET NO)
-    FetchContent_Populate(raylib)
-     # don't build the supplied examples
-    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    add_subdirectory(${raylib_SOURCE_DIR} ${raylib_BINARY_DIR})
-  endif()
-endif()
+set(BENCHMARK_ENABLE_GTEST_TESTS OFF)
+add_subdirectory(third-party/raylib)
 
-# Fetch googletest and benchmark if not build for web.
 if (NOT USE_EMSCRIPTEN)
-  FetchContent_Declare(
-    googletest
-    URL https://github.com/google/googletest/archive/refs/heads/main.zip
-  )
-  FetchContent_Declare(
-    benchmark 
-    URL https://github.com/google/benchmark/archive/refs/heads/main.zip
-  )
-  FetchContent_MakeAvailable(googletest benchmark)
-
   enable_testing()
+  set(BENCHMARK_ENABLE_GTEST_TESTS OFF)
+  add_subdirectory(third-party/benchmark)
+  add_subdirectory(third-party/googletest)
+
   function(create_test test_name entry_point)
     add_executable(${test_name} ${entry_point})
     target_include_directories(${test_name} PUBLIC ${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
