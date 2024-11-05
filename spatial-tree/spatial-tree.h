@@ -3269,8 +3269,8 @@ private:
         : std::conditional<std::is_void_v<StorageType>, tree_node_empty, tree_node_full>::type {};
 
     struct tree_node_leaf {
+        uint64_t                                    size;
         std::array<tree_node_impl, MaximumNodeSize> items;
-        uint16_t                                    size;
         tree_node_leaf() : size(0) {}
     };
 

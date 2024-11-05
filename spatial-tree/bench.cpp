@@ -1,3 +1,5 @@
+#define NDEBUG
+
 #include <benchmark/benchmark.h>
 
 #include <limits>
