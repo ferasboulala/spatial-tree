@@ -69,7 +69,7 @@ if (NOT USE_EMSCRIPTEN)
      )
      target_link_libraries(${benchmark_name} benchmark)
    endfunction()
- 
+
    create_benchmark("bench" spatial-tree/bench.cpp)
 endif()
 

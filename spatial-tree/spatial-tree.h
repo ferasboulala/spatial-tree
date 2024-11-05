@@ -3311,19 +3311,26 @@ private:
     }
 
     void emplace_recursively(uint64_t                                  node_index,
-                             const bounding_box<CoordinateType, Rank>& boundary,
+                             const bounding_box<CoordinateType, Rank>& _boundary,
                              std::array<CoordinateType, Rank>          point,
                              uint64_t                                  index = -1) {
-        assert(node_index < nodes_.size());
-        assert(boundary.contains(point));
+        bounding_box<CoordinateType, Rank> boundary = _boundary;
+        while (true) {
+            assert(_boundary.contains(point));
+            assert(node_index < nodes_.size());
 
-        tree_node& node = nodes_[node_index];
-        if (node.is_a_branch()) {
+            tree_node& node = nodes_[node_index];
+            if (!node.is_a_branch()) {
+                break;
+            }
+
             ++node.branch.size;
-            emplace_recursively_helper(node.branch.index_of_first_child, boundary, point, index);
-            return;
+            const auto [new_boundary, selected_quad] = boundary.recurse(point);
+            node_index = node.branch.index_of_first_child + selected_quad;
+            boundary = new_boundary;
         }
 
+        tree_node& node = nodes_[node_index];
         if (node.leaf.size < MaximumNodeSize) {
             internal::set<CoordinateType, Rank>(node.leaf.items[node.leaf.size].coordinates, point);
             if constexpr (!std::is_void_v<StorageType>) {
