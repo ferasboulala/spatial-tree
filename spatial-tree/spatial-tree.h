@@ -1,4 +1,15 @@
 // clang-format off
+/*
+_______  _______  _______  _______  ___   _______  ___             _______  ______    _______  _______
+|       ||       ||   _   ||       ||   | |   _   ||   |           |       ||    _ |  |       ||       |
+|  _____||    _  ||  |_|  ||_     _||   | |  |_|  ||   |     ____  |_     _||   | ||  |    ___||    ___|
+| |_____ |   |_| ||       |  |   |  |   | |       ||   |    |____|   |   |  |   |_||_ |   |___ |   |___
+|_____  ||    ___||       |  |   |  |   | |       ||   |___          |   |  |    __  ||    ___||    ___|
+_ ____| ||   |    |   _   |  |   |  |   | |   _   ||       |         |   |  |   |  | ||   |___ |   |___
+|_______||___|    |__| |__|  |___|  |___| |__| |__||_______|         |___|  |___|  |_||_______||_______|
+
+Fast & dynamic spatial partitioning data structure (quad, octree, etc).
+*/
 
 // Copy pasted from: https://github.com/martinus/robin-hood-hashing with some slight modifications
 // in robin_hood::pair to allow void values.
@@ -2604,6 +2615,21 @@ inline void unroll_for(InductionVarType start, InductionVarType stop, const Func
     }
 }
 
+template <uint64_t factor, typename Func>
+inline void unroll_for(const Func& func) {
+    if constexpr (factor == 2) {
+        __unroll_2 for (uint64_t i = 0; i < factor; ++i) { func(i); }
+    } else if (factor == 3) {
+        __unroll_3 for (uint64_t i = 0; i < factor; ++i) { func(i); }
+    } else if (factor == 4) {
+        __unroll_4 for (uint64_t i = 0; i < factor; ++i) { func(i); }
+    } else if (factor == 8) {
+        __unroll_8 for (uint64_t i = 0; i < factor; ++i) { func(i); }
+    } else {
+        __unroll_2 for (uint64_t i = 0; i < factor; ++i) { func(i); }
+    }
+}
+
 template <typename T>
 inline void hash_combine(std::size_t& seed, const T& v) {
     std::hash<T> hasher;
@@ -2614,7 +2640,7 @@ template <typename CoordinateType, uint64_t Rank>
 struct point_hash {
     inline size_t operator()(const std::array<CoordinateType, Rank>& key) const {
         size_t hash = 0x778abe;
-        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) { hash_combine(hash, key[i]); });
+        internal::unroll_for<Rank>([&](auto i) { hash_combine(hash, key[i]); });
         return hash;
     }
 };
@@ -2631,7 +2657,7 @@ inline constexpr T pow(T base, uint64_t exponent) {
 template <typename CoordinateType, uint64_t Rank>
 inline bool equal(std::array<CoordinateType, Rank> lhs, std::array<CoordinateType, Rank> rhs) {
     bool same = true;
-    unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) { same &= (lhs[i] == rhs[i]); });
+    unroll_for<Rank>([&](auto i) { same &= (lhs[i] == rhs[i]); });
 
     return same;
 }
@@ -2646,7 +2672,7 @@ struct point_equal {
 
 template <typename CoordinateType, uint64_t Rank>
 inline void set(std::array<CoordinateType, Rank>& dst, std::array<CoordinateType, Rank> src) {
-    unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) { dst[i] = src[i]; });
+    unroll_for<Rank>([&](auto i) { dst[i] = src[i]; });
 }
 
 template <typename AbsDiff, typename T, typename... Args>
@@ -2700,7 +2726,7 @@ inline T euclidean_distance_squared_arr_impl(AbsDiff             absdiff,
                                              std::array<T, Rank> lhs,
                                              std::array<T, Rank> rhs) {
     T sum = 0;
-    unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
+    unroll_for<Rank>([&](auto i) {
         const T dx = absdiff(lhs[i], rhs[i]);
         sum += dx * dx;
     });
@@ -2762,7 +2788,7 @@ struct bounding_box {
     }
 
     inline bounding_box(std::array<CoordinateType, Rank * 2> boundary) {
-        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](uint64_t i) {
+        internal::unroll_for<Rank>([&](uint64_t i) {
             assert(boundary[i] >= std::numeric_limits<CoordinateType>::lowest() / 2);
             assert(boundary[i + Rank] <= std::numeric_limits<CoordinateType>::max() / 2);
 
@@ -2773,7 +2799,7 @@ struct bounding_box {
 
     inline bounding_box(std::initializer_list<CoordinateType> boundary) {
         assert(boundary.size() == 2 * Rank);
-        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](uint64_t i) {
+        internal::unroll_for<Rank>([&](uint64_t i) {
             assert(*(boundary.begin() + i) >= std::numeric_limits<CoordinateType>::lowest() / 2);
             assert(*(boundary.begin() + i + Rank) <=
                    std::numeric_limits<CoordinateType>::max() / 2);
@@ -2789,8 +2815,7 @@ struct bounding_box {
 
     inline CoordinateType area() const {
         CoordinateType area = 1;
-        internal::unroll_for<Rank>(
-            uint64_t(0), Rank, [&](auto i) { area *= stops[i] - starts[i]; });
+        internal::unroll_for<Rank>([&](auto i) { area *= stops[i] - starts[i]; });
 
         return area;
     }
@@ -2798,7 +2823,7 @@ struct bounding_box {
     template <bool strict = false>
     inline bool contains(std::array<CoordinateType, Rank> point) const {
         bool is_contained = true;
-        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
+        internal::unroll_for<Rank>([&](auto i) {
             is_contained &=
                 internal::is_within_interval<CoordinateType, strict>(point[i], starts[i], stops[i]);
         });
@@ -2809,7 +2834,7 @@ struct bounding_box {
     template <bool strict = false>
     inline bool overlaps(const bounding_box<CoordinateType, Rank>& other) const {
         bool is_overlapping = true;
-        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
+        internal::unroll_for<Rank>([&](auto i) {
             is_overlapping &= internal::intervals_overlap<CoordinateType, strict>(
                 starts[i], stops[i], other.starts[i], other.stops[i]);
         });
@@ -2819,9 +2844,8 @@ struct bounding_box {
 
     inline std::array<CoordinateType, Rank> origin() const {
         std::array<CoordinateType, Rank> origins;
-        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
-            origins[i] = (stops[i] - starts[i]) / 2 + starts[i];
-        });
+        internal::unroll_for<Rank>(
+            [&](auto i) { origins[i] = (stops[i] - starts[i]) / 2 + starts[i]; });
 
         return origins;
     }
@@ -2831,8 +2855,7 @@ struct bounding_box {
         // Assumes the bbox is infinite.
         uint64_t   quadrant = 0;
         const auto origins = origin();
-        internal::unroll_for<Rank>(
-            uint64_t(0), Rank, [&](auto i) { quadrant |= (point[i] > origins[i]) << i; });
+        internal::unroll_for<Rank>([&](auto i) { quadrant |= (point[i] > origins[i]) << i; });
 
         return quadrant;
     }
@@ -2844,7 +2867,7 @@ struct bounding_box {
         const auto                           origins = origin();
         uint64_t                             quad = 0;
         std::array<CoordinateType, Rank * 2> boundary;
-        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
+        internal::unroll_for<Rank>([&](auto i) {
             CoordinateType span = stops[i] - starts[i];
             CoordinateType new_span = span / 2;
             // Contract: lower region is ceiled, upper region is floored. (>)
@@ -2869,7 +2892,7 @@ struct bounding_box {
         assert(quad < BranchingFactor);
 
         std::array<CoordinateType, Rank * 2> boundary;
-        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
+        internal::unroll_for<Rank>([&](auto i) {
             CoordinateType span = stops[i] - starts[i];
             CoordinateType new_span = span / 2;
             CoordinateType remainder = span - 2 * new_span;
@@ -2888,7 +2911,7 @@ struct bounding_box {
 
     inline CoordinateType sdistance(std::array<CoordinateType, Rank> point) const {
         CoordinateType distance_squared = 0;
-        internal::unroll_for<Rank>(uint64_t(0), Rank, [&](auto i) {
+        internal::unroll_for<Rank>([&](auto i) {
             CoordinateType gt = (point[i] > stops[i]) * (point[i] - stops[i]);
             CoordinateType lt = (point[i] < starts[i]) * (starts[i] - point[i]);
             distance_squared += gt * gt + lt * lt;
@@ -3082,11 +3105,11 @@ public:
                     return;
                 }
 
-                for (uint64_t child = 0; child < BranchingFactor; ++child) {
+                internal::unroll_for<BranchingFactor>([&](auto child) {
                     const uint64_t child_index = node.branch.index_of_first_child + child;
                     const auto     new_boundary = boundary.qrecurse(child);
                     walk_recursively(child_index, new_boundary);
-                }
+                });
             };
 
         walk_recursively(0, boundary_);
@@ -3323,7 +3346,7 @@ private:
 
         // nodes_.resize may have reallocated.
         tree_node& node_as_branch = nodes_[node_index];
-        internal::unroll_for<MaximumNodeSize>(uint16_t(0), MaximumNodeSize, [&](auto i) {
+        internal::unroll_for<MaximumNodeSize>([&](auto i) {
             if constexpr (std::is_void_v<StorageType>) {
                 emplace_recursively_helper(
                     new_index_of_first_child, boundary, node_as_branch.leaf.items[i].coordinates);
@@ -3399,9 +3422,8 @@ private:
         /// EXPLANATION: Not doing it at the root because of the union.
         uint64_t index_of_first_child = node.branch.index_of_first_child;
         node = tree_node();
-        internal::unroll_for<BranchingFactor>(uint64_t(0), BranchingFactor, [&](auto quad) {
-            recursively_gather_points(index_of_first_child + quad, node.leaf);
-        });
+        internal::unroll_for<BranchingFactor>(
+            [&](auto quad) { recursively_gather_points(index_of_first_child + quad, node.leaf); });
         freed_nodes_.push_back(index_of_first_child);
         assert(node.leaf.size <= MaximumNodeSize);
     }
@@ -3428,7 +3450,7 @@ private:
             return;
         }
 
-        internal::unroll_for<BranchingFactor>(uint64_t(0), BranchingFactor, [&](auto quad) {
+        internal::unroll_for<BranchingFactor>([&](auto quad) {
             auto new_boundary = boundary.qrecurse(quad);
             if (bbox.overlaps(new_boundary)) {
                 find_recursively<Func, MaybeConstType>(
@@ -3475,9 +3497,8 @@ private:
         }
 
         std::array<bounding_box<CoordinateType, Rank>, BranchingFactor> new_boundaries;
-        internal::unroll_for<BranchingFactor>(uint64_t(0), BranchingFactor, [&](auto quad) {
-            new_boundaries[quad] = boundary.qrecurse(quad);
-        });
+        internal::unroll_for<BranchingFactor>(
+            [&](auto quad) { new_boundaries[quad] = boundary.qrecurse(quad); });
 
         const auto selected_quad = boundary.quadrant(point);
         nearest_recursively(node.branch.index_of_first_child + selected_quad,

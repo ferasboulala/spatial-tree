@@ -18,7 +18,7 @@ struct opaque_data {
     char opaque[sizeof(void *)];
     opaque_data() {}
 };
-static constexpr uint64_t MAX_NODE_SIZE = 256;
+static constexpr uint64_t MAX_NODE_SIZE = 1024;
 
 template <typename CoordT>
 std::vector<std::pair<CoordT, CoordT>> generate_points(CoordT BEG, CoordT END, uint64_t test_size) {
@@ -210,6 +210,36 @@ void benchmark_nearest(benchmark::State &state, TreeType &tree) {
     state.SetItemsProcessed(n_queries * state.iterations());
 }
 
+template <typename CoordT, typename TreeType>
+void benchmark_iteration(benchmark::State &state, TreeType &tree) {
+    static_assert(std::is_signed_v<CoordT>);
+
+    static constexpr CoordT BEG = BEG_TYPELESS;
+    static constexpr CoordT END = END_TYPELESS;
+
+    const uint64_t test_size = state.range(0);
+    const auto     points = generate_points(BEG, END, test_size);
+
+    tree.reserve(test_size);
+    for (auto _ : state) {
+        for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = points[i];
+            tree.emplace({x, y});
+        }
+    }
+
+    for (auto _ : state) {
+        int i = 0;
+        for (const auto &p : tree) {
+            ++i;
+        }
+        assert(i == test_size);
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(state.iterations() * test_size);
+}
+
+
 using VALUE_TYPE = void;
 
 template <typename CoordT>
@@ -262,6 +292,16 @@ void nearest(benchmark::State &state) {
     benchmark_nearest<CoordT>(state, tree);
 }
 
+template <typename CoordT>
+void iteration(benchmark::State &state) {
+    static constexpr CoordT BEG = BEG_TYPELESS;
+    static constexpr CoordT END = END_TYPELESS;
+
+    auto tree = st::internal::spatial_tree<CoordT, VALUE_TYPE, 2, MAX_NODE_SIZE>(
+        st::bounding_box<CoordT, 2>({BEG, BEG, END, END}));
+    benchmark_iteration<CoordT>(state, tree);
+}
+
 using COORD_TYPE = float;
 
 BENCHMARK(insertions<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
@@ -269,5 +309,6 @@ BENCHMARK(deletions<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(find<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(find_single<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(nearest<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(iteration<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 
 BENCHMARK_MAIN();
