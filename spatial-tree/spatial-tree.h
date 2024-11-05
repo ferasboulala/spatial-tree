@@ -3269,16 +3269,20 @@ private:
         : std::conditional<std::is_void_v<StorageType>, tree_node_empty, tree_node_full>::type {};
 
     struct tree_node_leaf {
-        uint64_t                                    size;
+        int64_t                                     size_;
         std::array<tree_node_impl, MaximumNodeSize> items;
-        tree_node_leaf() : size(0) {}
+
+        inline tree_node_leaf() : size_(-1) {}
+        inline uint64_t size() const { return size_ * -1 - 1; }
+        inline void     increment_size() { --size_; }
+        inline void     decrement_size() { ++size_; }
     };
 
     struct tree_node_branch {
         uint64_t size;
         // Children are adjacent in memory.
         uint64_t index_of_first_child;
-        tree_node_branch() : size(0) {}
+        inline tree_node_branch() : size(0) {}
     };
 
     struct tree_node {
@@ -3288,16 +3292,15 @@ private:
             tree_node_leaf   leaf;
             tree_node_branch branch;
         };
-        bool is_branch;
 
-        inline tree_node() noexcept : leaf(), is_branch(false) {}
-        inline bool     is_a_branch() const { return is_branch; }
+        inline tree_node() noexcept : leaf() {}
+        inline bool     is_a_branch() const { return leaf.size_ >= 0; }
         inline bool     is_a_leaf() const { return !is_a_branch(); }
         inline uint64_t size() const {
             if (is_a_branch()) {
                 return branch.size;
             } else {
-                return leaf.size;
+                return leaf.size();
             }
         }
     };
@@ -3331,12 +3334,13 @@ private:
         }
 
         tree_node& node = nodes_[node_index];
-        if (node.leaf.size < MaximumNodeSize) {
-            internal::set<CoordinateType, Rank>(node.leaf.items[node.leaf.size].coordinates, point);
+        if (node.leaf.size() < MaximumNodeSize) {
+            internal::set<CoordinateType, Rank>(node.leaf.items[node.leaf.size()].coordinates,
+                                                point);
             if constexpr (!std::is_void_v<StorageType>) {
-                node.leaf.items[node.leaf.size].index = index;
+                node.leaf.items[node.leaf.size()].index = index;
             }
-            ++node.leaf.size;
+            node.leaf.increment_size();
             return;
         }
 
@@ -3366,7 +3370,6 @@ private:
         });
         node_as_branch.branch.index_of_first_child = new_index_of_first_child;
         node_as_branch.branch.size = MaximumNodeSize + 1;
-        node_as_branch.is_branch = true;
         emplace_recursively_helper(new_index_of_first_child, boundary, point, index);
     }
 
@@ -3375,10 +3378,11 @@ private:
 
         tree_node& node = nodes_[node_index];
         if (node.is_a_leaf()) {
-            for (uint16_t i = 0; i < node.leaf.size; ++i) {
-                leaf.items[leaf.size++] = node.leaf.items[i];
+            for (uint16_t i = 0; i < node.leaf.size(); ++i) {
+                leaf.items[leaf.size()] = node.leaf.items[i];
+                leaf.increment_size();
             }
-            assert(leaf.size <= MaximumNodeSize);
+            assert(leaf.size() <= MaximumNodeSize);
             node = tree_node();
             return;
         }
@@ -3401,9 +3405,10 @@ private:
 
         tree_node& node = nodes_[node_index];
         if (node.is_a_leaf()) {
-            for (uint16_t i = 0; i < node.leaf.size; ++i) {
+            for (uint16_t i = 0; i < node.leaf.size(); ++i) {
                 if (internal::equal<CoordinateType, Rank>(point, node.leaf.items[i].coordinates)) {
-                    node.leaf.items[i] = node.leaf.items[--node.leaf.size];
+                    node.leaf.decrement_size();
+                    node.leaf.items[i] = node.leaf.items[node.leaf.size()];
                     return;
                 }
             }
@@ -3432,7 +3437,7 @@ private:
         internal::unroll_for<BranchingFactor>(
             [&](auto quad) { recursively_gather_points(index_of_first_child + quad, node.leaf); });
         freed_nodes_.push_back(index_of_first_child);
-        assert(node.leaf.size <= MaximumNodeSize);
+        assert(node.leaf.size() <= MaximumNodeSize);
     }
 
     template <typename Func, typename MaybeConstType>
@@ -3444,7 +3449,7 @@ private:
 
         tree_node& node = nodes_[node_index];
         if (node.is_a_leaf()) {
-            for (uint64_t i = 0; i < node.leaf.size; ++i) {
+            for (uint64_t i = 0; i < node.leaf.size(); ++i) {
                 if (bbox.contains(node.leaf.items[i].coordinates)) {
                     if constexpr (std::is_void_v<StorageType>) {
                         func(MaybeConstType(node.leaf.items[i].coordinates));
@@ -3477,7 +3482,7 @@ private:
         tree_node& node = nodes_[node_index];
 
         if (node.is_a_leaf()) {
-            for (uint64_t i = 0; i < node.leaf.size; ++i) {
+            for (uint64_t i = 0; i < node.leaf.size(); ++i) {
                 auto distance = euclidean_distance_squared_arr<CoordinateType, Rank>(
                     point, node.leaf.items[i].coordinates);
                 if (distance < nearest_distance_squared) {
