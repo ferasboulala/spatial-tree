@@ -47,8 +47,6 @@ void benchmark_insertions(benchmark::State &state, TreeType &tree) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(BEG, END, test_size);
 
-    uint64_t n_points_inserted = 0;
-    uint64_t n_collisions = 0;
     tree.reserve(test_size);
     for (auto _ : state) {
         state.PauseTiming();
@@ -56,16 +54,37 @@ void benchmark_insertions(benchmark::State &state, TreeType &tree) {
         state.ResumeTiming();
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            bool inserted = tree.emplace({x, y}).second;
-            n_points_inserted += inserted;
-            n_collisions += (1 - inserted);
+            tree.emplace({x, y}).second;
         }
         benchmark::ClobberMemory();
     }
     state.counters["volume"] = tree.volume();
-    state.counters["memory"] = tree.bsize();
-    state.counters["inserted"] = n_points_inserted / state.iterations();
-    state.counters["collisions"] = n_collisions / state.iterations();
+    state.SetItemsProcessed(test_size * state.iterations());
+}
+
+template <typename CoordT, typename TreeType>
+void benchmark_insertions_duplicate(benchmark::State &state, TreeType &tree) {
+    static_assert(std::is_signed_v<CoordT>);
+
+    static constexpr CoordT BEG = BEG_TYPELESS;
+    static constexpr CoordT END = END_TYPELESS;
+
+    const uint64_t test_size = state.range(0);
+    const auto     points = generate_points(BEG, END, test_size);
+    tree.clear();
+    tree.reserve(test_size);
+    for (uint64_t i = 0; i < test_size; ++i) {
+        auto [x, y] = points[i];
+        tree.emplace({x, y});
+    }
+
+    for (auto _ : state) {
+        for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = points[i];
+            tree.emplace({x, y});
+        }
+        benchmark::ClobberMemory();
+    }
     state.SetItemsProcessed(test_size * state.iterations());
 }
 
@@ -80,25 +99,48 @@ void benchmark_deletions(benchmark::State &state, TreeType &tree) {
     const auto     points = generate_points(BEG, END, test_size);
 
     tree.reserve(test_size);
-    for (auto _ : state) {
-        for (uint64_t i = 0; i < test_size; ++i) {
-            auto [x, y] = points[i];
-            tree.emplace({x, y});
-        }
+    tree.clear();
+    for (uint64_t i = 0; i < test_size; ++i) {
+        auto [x, y] = points[i];
+        tree.emplace({x, y});
     }
 
-    const auto other_points = generate_points(BEG, END, test_size);
-
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            auto [x_, y_] = other_points[i];
             tree.erase({x, y});
-            tree.erase({x_, y_});
         }
         benchmark::ClobberMemory();
     }
-    state.SetItemsProcessed(test_size * 2 * state.iterations());
+    state.SetItemsProcessed(test_size * state.iterations());
+}
+
+template <typename CoordT, typename TreeType>
+void benchmark_deletions_non_existent(benchmark::State &state, TreeType &tree) {
+    static_assert(std::is_signed_v<CoordT>);
+
+    static constexpr CoordT BEG = BEG_TYPELESS;
+    static constexpr CoordT END = END_TYPELESS;
+
+    const uint64_t test_size = state.range(0);
+    const auto     points = generate_points(BEG, END, test_size);
+
+    tree.reserve(test_size);
+    tree.clear();
+    for (uint64_t i = 0; i < test_size; ++i) {
+        auto [x, y] = points[i];
+        tree.emplace({x, y});
+    }
+
+    const auto other_points = generate_points(BEG, END, test_size);
+    for (auto _ : state) {
+        for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = other_points[i];
+            tree.erase({x, y});
+        }
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(test_size * state.iterations());
 }
 
 template <typename CoordT, typename TreeType>
@@ -118,11 +160,10 @@ void benchmark_find(benchmark::State &state, TreeType &tree) {
     const auto     points = generate_points(BEG, END, test_size);
 
     tree.reserve(test_size);
-    for (auto _ : state) {
-        for (uint64_t i = 0; i < test_size; ++i) {
-            auto [x, y] = points[i];
-            tree.emplace({x, y});
-        }
+    tree.clear();
+    for (uint64_t i = 0; i < test_size; ++i) {
+        auto [x, y] = points[i];
+        tree.emplace({x, y});
     }
 
     static constexpr uint64_t n_bounding_boxes = 1 << 16;
@@ -160,11 +201,10 @@ void benchmark_find_single(benchmark::State &state, TreeType &tree) {
     const auto     points = generate_points(BEG, END, test_size);
 
     tree.reserve(test_size);
-    for (auto _ : state) {
-        for (uint64_t i = 0; i < test_size; ++i) {
-            auto [x, y] = points[i];
-            tree.emplace({x, y});
-        }
+    tree.clear();
+    for (uint64_t i = 0; i < test_size; ++i) {
+        auto [x, y] = points[i];
+        tree.emplace({x, y});
     }
 
     static constexpr uint64_t n_points_to_find = 1 << 24;
@@ -172,7 +212,7 @@ void benchmark_find_single(benchmark::State &state, TreeType &tree) {
 
     for (auto _ : state) {
         for (auto [x, y] : points_to_find) {
-            tree.find({x, y});
+            benchmark::DoNotOptimize(tree.find({x, y}));
         }
         benchmark::ClobberMemory();
     }
@@ -190,11 +230,10 @@ void benchmark_nearest(benchmark::State &state, TreeType &tree) {
     const auto     points = generate_points(BEG, END, test_size);
 
     tree.reserve(test_size);
-    for (auto _ : state) {
-        for (uint64_t i = 0; i < test_size; ++i) {
-            auto [x, y] = points[i];
-            tree.emplace({x, y});
-        }
+    tree.clear();
+    for (uint64_t i = 0; i < test_size; ++i) {
+        auto [x, y] = points[i];
+        tree.emplace({x, y});
     }
 
     static constexpr uint64_t n_queries = 1 << 24;
@@ -230,7 +269,7 @@ void benchmark_iteration(benchmark::State &state, TreeType &tree) {
 
     for (auto _ : state) {
         int i = 0;
-        for (const auto &p : tree) {
+        for (const auto &_ : tree) {
             ++i;
         }
         assert(i == test_size);
@@ -238,7 +277,6 @@ void benchmark_iteration(benchmark::State &state, TreeType &tree) {
     }
     state.SetItemsProcessed(state.iterations() * test_size);
 }
-
 
 using VALUE_TYPE = void;
 
@@ -253,6 +291,16 @@ void insertions(benchmark::State &state) {
 }
 
 template <typename CoordT>
+void insertions_duplicate(benchmark::State &state) {
+    static constexpr CoordT BEG = BEG_TYPELESS;
+    static constexpr CoordT END = END_TYPELESS;
+
+    auto tree = st::internal::spatial_tree<CoordT, VALUE_TYPE, 2, MAX_NODE_SIZE>(
+        st::bounding_box<CoordT, 2>({BEG, BEG, END, END}));
+    benchmark_insertions_duplicate<CoordT>(state, tree);
+}
+
+template <typename CoordT>
 void deletions(benchmark::State &state) {
     static constexpr CoordT BEG = BEG_TYPELESS;
     static constexpr CoordT END = END_TYPELESS;
@@ -260,6 +308,16 @@ void deletions(benchmark::State &state) {
     auto tree = st::internal::spatial_tree<CoordT, VALUE_TYPE, 2, MAX_NODE_SIZE>(
         st::bounding_box<CoordT, 2>({BEG, BEG, END, END}));
     benchmark_deletions<CoordT>(state, tree);
+}
+
+template <typename CoordT>
+void deletions_non_existent(benchmark::State &state) {
+    static constexpr CoordT BEG = BEG_TYPELESS;
+    static constexpr CoordT END = END_TYPELESS;
+
+    auto tree = st::internal::spatial_tree<CoordT, VALUE_TYPE, 2, MAX_NODE_SIZE>(
+        st::bounding_box<CoordT, 2>({BEG, BEG, END, END}));
+    benchmark_deletions_non_existent<CoordT>(state, tree);
 }
 
 template <typename CoordT>
@@ -305,7 +363,9 @@ void iteration(benchmark::State &state) {
 using COORD_TYPE = float;
 
 BENCHMARK(insertions<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(insertions_duplicate<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(deletions<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
+BENCHMARK(deletions_non_existent<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(find<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(find_single<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
 BENCHMARK(nearest<COORD_TYPE>)->RangeMultiplier(2)->Range(LOW, HIGH);
