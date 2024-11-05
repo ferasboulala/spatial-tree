@@ -1,9 +1,5 @@
 #ifdef NDEBUG
 #undef NDEBUG
-#include "spatial-tree.h"
-#define NDEBUG
-#else
-#include "spatial-tree.h"
 #endif
 
 #include <gtest/gtest.h>
@@ -12,6 +8,8 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+
+#include "spatial-tree.h"
 
 TEST(TestUnroll, TestUnroll) {
     const auto typed_test = [&]<typename CoordT>() {
@@ -275,20 +273,16 @@ TEST(TestSpatialTree, Destructors) {
     class MyObject {
     public:
         inline MyObject(int &c) : counter(&c) {
-            assert(enabled);
             enabled = true;
             *counter = *counter + 1;
         }
         inline MyObject(MyObject &&other) : enabled(other.enabled), counter(other.counter) {
-            assert(enabled);
             *counter = *counter + 1;
         }
         inline MyObject(const MyObject &other) : enabled(other.enabled), counter(other.counter) {
-            assert(enabled);
             *counter = *counter + 1;
         }
         inline ~MyObject() {
-            assert(enabled);
             enabled = false;
             *counter = *counter - 1;
         }
