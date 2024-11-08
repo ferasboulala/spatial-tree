@@ -2926,12 +2926,18 @@ namespace internal {
 template <typename CoordinateType,
           typename StorageType,
           uint64_t Rank,
-          uint16_t MaximumNodeSize = 64>
+          uint16_t MaximumNodeSize = 64,
+          uint8_t  IndexBitWidth = 64>
 class spatial_tree {
 private:
     static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8,
                   "Rank must be greater than 0 and less than 64");
     static_assert(MaximumNodeSize > 0, "Maximum node size must be greater than 1");
+    static_assert(IndexBitWidth == 64 || IndexBitWidth == 32, "Only 32 and 64 bits are supported");
+
+    using SignedIndexType = typename std::conditional<IndexBitWidth == 64, int64_t, int32_t>::type;
+    using UnsignedIndexType =
+        typename std::conditional<IndexBitWidth == 64, uint64_t, uint32_t>::type;
 
     static constexpr uint64_t BranchingFactor = internal::pow(2, Rank);
 
@@ -2990,6 +2996,8 @@ private:
 
 public:
     using coordinate_type = std::array<CoordinateType, Rank>;
+    using this_type =
+        spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize, IndexBitWidth>;
 
     template <typename MaybeConstType>
     struct iterator {
@@ -3000,10 +3008,7 @@ public:
         using reference = value_type&;
 
     public:
-        inline iterator(
-            MaybeConstType                                                          it,
-            const spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize>* tree) noexcept
-            : it_(it), tree_(tree) {}
+        inline iterator(MaybeConstType it, const this_type* tree) noexcept : it_(it), tree_(tree) {}
         inline auto operator*() const {
             if constexpr (std::is_void_v<StorageType>) {
                 return *it_;
@@ -3023,11 +3028,7 @@ public:
                 assert(idx < tree_->storage_.vec.size());
                 assert(tree_->storage_.vec[idx].enabled);
                 return std::pair<std::array<CoordinateType, Rank>, StorageType&>{
-                    key,
-                    const_cast<spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize>*>(
-                        tree_)
-                        ->storage_.vec[idx]
-                        .data};
+                    key, const_cast<this_type*>(tree_)->storage_.vec[idx].data};
             }
         }
         inline auto      get() { return this->operator*(); }
@@ -3039,8 +3040,8 @@ public:
         inline bool operator!=(const iterator& other) const { return !(*this == other); }
 
     private:
-        MaybeConstType                                                          it_;
-        const spatial_tree<CoordinateType, StorageType, Rank, MaximumNodeSize>* tree_;
+        MaybeConstType   it_;
+        const this_type* tree_;
     };
 
     spatial_tree() noexcept { clear(); }
@@ -3262,41 +3263,39 @@ private:
 
     struct tree_node_full {
         std::array<CoordinateType, Rank> coordinates;
-        uint64_t                         index;
+        UnsignedIndexType                index;
     };
 
     struct tree_node_impl
         : std::conditional<std::is_void_v<StorageType>, tree_node_empty, tree_node_full>::type {};
 
     struct tree_node_leaf {
-        int64_t                                     size_;
+        SignedIndexType                             size_;
         std::array<tree_node_impl, MaximumNodeSize> items;
 
         inline tree_node_leaf() : size_(-1) {}
-        inline uint64_t size() const { return size_ * -1 - 1; }
-        inline void     increment_size() { --size_; }
-        inline void     decrement_size() { ++size_; }
+        inline UnsignedIndexType size() const { return size_ * -1 - 1; }
+        inline void              increment_size() { --size_; }
+        inline void              decrement_size() { ++size_; }
     };
 
     struct tree_node_branch {
-        uint64_t size;
+        UnsignedIndexType size;
         // Children are adjacent in memory.
-        uint64_t index_of_first_child;
+        UnsignedIndexType index_of_first_child;
         inline tree_node_branch() : size(0) {}
     };
 
     struct tree_node {
-        static constexpr uint64_t NO_INDEX = std::numeric_limits<uint64_t>::max();
-
         union {
             tree_node_leaf   leaf;
             tree_node_branch branch;
         };
 
         inline tree_node() noexcept : leaf() {}
-        inline bool     is_a_branch() const { return leaf.size_ >= 0; }
-        inline bool     is_a_leaf() const { return !is_a_branch(); }
-        inline uint64_t size() const {
+        inline bool              is_a_branch() const { return leaf.size_ >= 0; }
+        inline bool              is_a_leaf() const { return !is_a_branch(); }
+        inline UnsignedIndexType size() const {
             if (is_a_branch()) {
                 return branch.size;
             } else {
@@ -3345,7 +3344,7 @@ private:
         }
 
         uint64_t new_index_of_first_child;
-        if (freed_nodes_.size()) {
+        if (!freed_nodes_.empty()) {
             new_index_of_first_child = freed_nodes_.back();
             assert(nodes_[new_index_of_first_child].is_a_leaf());
             freed_nodes_.pop_back();
