@@ -2771,7 +2771,28 @@ inline bool intervals_overlap(CoordinateType lhs_beg,
     }
 }
 
+template <typename CoordinateType, bool strict = false>
+inline bool intervals_encompasses(CoordinateType lhs_beg,
+                                  CoordinateType lhs_end,
+                                  CoordinateType rhs_beg,
+                                  CoordinateType rhs_end) {
+    assert(lhs_beg <= lhs_end);
+    assert(rhs_beg <= rhs_end);
+
+    if constexpr (strict) {
+        return rhs_beg > lhs_beg && rhs_end < lhs_end;
+    } else {
+        return rhs_beg >= lhs_beg && rhs_end <= lhs_end;
+    }
+}
+
 }  // namespace internal
+
+enum class OverlappingMode {
+    Disjoint,
+    Overlaps,
+    Encompasses,
+};
 
 template <typename CoordinateType, uint64_t Rank>
 struct bounding_box {
@@ -2832,14 +2853,24 @@ struct bounding_box {
     }
 
     template <bool strict = false>
-    inline bool overlaps(const bounding_box<CoordinateType, Rank>& other) const {
+    inline OverlappingMode overlaps(const bounding_box<CoordinateType, Rank>& other) const {
         bool is_overlapping = true;
+        bool is_encompassing = true;
         internal::unroll_for<Rank>([&](auto i) {
             is_overlapping &= internal::intervals_overlap<CoordinateType, strict>(
                 starts[i], stops[i], other.starts[i], other.stops[i]);
+            is_encompassing &= internal::intervals_encompasses<CoordinateType, strict>(
+                starts[i], stops[i], other.starts[i], other.stops[i]);
         });
 
-        return is_overlapping;
+        if (is_encompassing) {
+            assert(is_overlapping);
+            return OverlappingMode::Encompasses;
+        } else if (is_overlapping) {
+            return OverlappingMode::Overlaps;
+        }
+
+        return OverlappingMode::Disjoint;
     }
 
     inline std::array<CoordinateType, Rank> origin() const {
@@ -3439,7 +3470,7 @@ private:
         assert(node.leaf.size() <= MaximumNodeSize);
     }
 
-    template <typename Func, typename MaybeConstType>
+    template <typename Func, typename MaybeConstType, bool Encompasses = false>
     inline void find_recursively(const bounding_box<CoordinateType, Rank>& bbox,
                                  const bounding_box<CoordinateType, Rank>& boundary,
                                  Func                                      func,
@@ -3449,7 +3480,7 @@ private:
         tree_node& node = nodes_[node_index];
         if (node.is_a_leaf()) {
             for (uint64_t i = 0; i < node.leaf.size(); ++i) {
-                if (bbox.contains(node.leaf.items[i].coordinates)) {
+                if (Encompasses || bbox.contains(node.leaf.items[i].coordinates)) {
                     if constexpr (std::is_void_v<StorageType>) {
                         func(MaybeConstType(node.leaf.items[i].coordinates));
                     } else {
@@ -3462,9 +3493,19 @@ private:
         }
 
         internal::unroll_for<BranchingFactor>([&](auto quad) {
+            if constexpr (Encompasses) {
+                find_recursively<Func, MaybeConstType, true>(
+                    bbox, boundary, func, node.branch.index_of_first_child + quad);
+                return;
+            }
+
             auto new_boundary = boundary.qrecurse(quad);
-            if (bbox.overlaps(new_boundary)) {
-                find_recursively<Func, MaybeConstType>(
+            auto overlapping_mode = bbox.overlaps(new_boundary);
+            if (overlapping_mode == OverlappingMode::Encompasses) {
+                find_recursively<Func, MaybeConstType, true>(
+                    bbox, new_boundary, func, node.branch.index_of_first_child + quad);
+            } else if (overlapping_mode == OverlappingMode::Overlaps) {
+                find_recursively<Func, MaybeConstType, false>(
                     bbox, new_boundary, func, node.branch.index_of_first_child + quad);
             }
         });

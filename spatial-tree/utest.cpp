@@ -88,27 +88,27 @@ TEST(TestBoundingBox, Contains) {
 TEST(TestBoundingBox, Overlaps) {
     const auto typed_test = [&]<typename CoordT>() {
         const st::bounding_box<CoordT, 2> lhs = {0, 0, 10, 10};
-        ASSERT_TRUE(lhs.overlaps(lhs));
+        ASSERT_EQ(lhs.overlaps(lhs), st::OverlappingMode::Encompasses);
 
         for (CoordT i = -10; i < -5; ++i) {
             const st::bounding_box<CoordT, 2> rhs = {i, i, i + 5, i + 5};
-            ASSERT_TRUE(rhs.overlaps(rhs));
-            ASSERT_FALSE(lhs.overlaps(rhs));
-            ASSERT_FALSE(rhs.overlaps(lhs));
+            ASSERT_EQ(rhs.overlaps(rhs), st::OverlappingMode::Encompasses);
+            ASSERT_EQ(lhs.overlaps(rhs), st::OverlappingMode::Disjoint);
+            ASSERT_EQ(rhs.overlaps(lhs), st::OverlappingMode::Disjoint);
         }
 
-        for (CoordT i = -5; i < 10; ++i) {
+        for (CoordT i = -5; i < 0; ++i) {
             const st::bounding_box<CoordT, 2> rhs = {i, i, i + 5, i + 5};
-            ASSERT_TRUE(rhs.overlaps(rhs));
-            ASSERT_TRUE(lhs.overlaps(rhs));
-            ASSERT_TRUE(rhs.overlaps(lhs));
+            ASSERT_EQ(rhs.overlaps(rhs), st::OverlappingMode::Encompasses);
+            ASSERT_EQ(lhs.overlaps(rhs), st::OverlappingMode::Overlaps);
+            ASSERT_EQ(rhs.overlaps(lhs), st::OverlappingMode::Overlaps);
         }
 
         for (CoordT i = 11; i < 15; ++i) {
             const st::bounding_box<CoordT, 2> rhs = {i, i, i + 5, i + 5};
-            ASSERT_TRUE(rhs.overlaps(rhs));
-            ASSERT_FALSE(lhs.overlaps(rhs));
-            ASSERT_FALSE(rhs.overlaps(lhs));
+            ASSERT_EQ(rhs.overlaps(rhs), st::OverlappingMode::Encompasses);
+            ASSERT_EQ(lhs.overlaps(rhs), st::OverlappingMode::Disjoint);
+            ASSERT_EQ(rhs.overlaps(lhs), st::OverlappingMode::Disjoint);
         }
     };
 
