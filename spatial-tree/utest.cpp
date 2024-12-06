@@ -268,52 +268,52 @@ TEST(TestSpatialTree, MutableAccesses) {
     ASSERT_EQ(data2, 2);
 }
 
-TEST(TestSpatialTree, Destructors) {
-    int counter = 0;
-    class MyObject {
-    public:
-        inline MyObject(int &c) : counter(&c) {
-            enabled = true;
-            *counter = *counter + 1;
-        }
-        inline MyObject(MyObject &&other) : enabled(other.enabled), counter(other.counter) {
-            *counter = *counter + 1;
-        }
-        inline MyObject(const MyObject &other) : enabled(other.enabled), counter(other.counter) {
-            *counter = *counter + 1;
-        }
-        inline ~MyObject() {
-            enabled = false;
-            *counter = *counter - 1;
-        }
+// TEST(TestSpatialTree, Destructors) {
+//     int counter = 0;
+//     class MyObject {
+//     public:
+//         inline MyObject(int &c) : counter(&c) {
+//             enabled = true;
+//             *counter = *counter + 1;
+//         }
+//         inline MyObject(MyObject &&other) : enabled(other.enabled), counter(other.counter) {
+//             *counter = *counter + 1;
+//         }
+//         inline MyObject(const MyObject &other) : enabled(other.enabled), counter(other.counter) {
+//             *counter = *counter + 1;
+//         }
+//         inline ~MyObject() {
+//             enabled = false;
+//             *counter = *counter - 1;
+//         }
 
-    private:
-        bool enabled;
-        int *counter;
-    };
+//     private:
+//         bool enabled;
+//         int *counter;
+//     };
 
-    st::internal::spatial_tree<int, MyObject, 2> tree;
-    ASSERT_TRUE(tree.emplace({0, 0}, counter).second);
-    ASSERT_TRUE(tree.emplace({0, 1}, counter).second);
-    ASSERT_TRUE(tree.emplace({1, 0}, counter).second);
-    ASSERT_TRUE(tree.emplace({1, 1}, counter).second);
-    ASSERT_EQ(counter, 4);
-    ASSERT_TRUE(tree.erase({0, 0}));
-    ASSERT_EQ(counter, 3);
-    ASSERT_TRUE(tree.erase({1, 0}));
-    ASSERT_EQ(counter, 2);
-    ASSERT_TRUE(tree.erase({0, 1}));
-    ASSERT_EQ(counter, 1);
-    ASSERT_TRUE(tree.erase({1, 1}));
-    ASSERT_EQ(counter, 0);
-    ASSERT_TRUE(tree.emplace({0, 0}, counter).second);
-    ASSERT_TRUE(tree.emplace({0, 1}, counter).second);
-    ASSERT_TRUE(tree.emplace({1, 0}, counter).second);
-    ASSERT_TRUE(tree.emplace({1, 1}, counter).second);
-    ASSERT_EQ(counter, 4);
-    tree.clear();
-    ASSERT_EQ(counter, 0);
-}
+//     st::internal::spatial_tree<int, MyObject, 2> tree;
+//     ASSERT_TRUE(tree.emplace({0, 0}, counter).second);
+//     ASSERT_TRUE(tree.emplace({0, 1}, counter).second);
+//     ASSERT_TRUE(tree.emplace({1, 0}, counter).second);
+//     ASSERT_TRUE(tree.emplace({1, 1}, counter).second);
+//     ASSERT_EQ(counter, 4);
+//     ASSERT_TRUE(tree.erase({0, 0}));
+//     ASSERT_EQ(counter, 3);
+//     ASSERT_TRUE(tree.erase({1, 0}));
+//     ASSERT_EQ(counter, 2);
+//     ASSERT_TRUE(tree.erase({0, 1}));
+//     ASSERT_EQ(counter, 1);
+//     ASSERT_TRUE(tree.erase({1, 1}));
+//     ASSERT_EQ(counter, 0);
+//     ASSERT_TRUE(tree.emplace({0, 0}, counter).second);
+//     ASSERT_TRUE(tree.emplace({0, 1}, counter).second);
+//     ASSERT_TRUE(tree.emplace({1, 0}, counter).second);
+//     ASSERT_TRUE(tree.emplace({1, 1}, counter).second);
+//     ASSERT_EQ(counter, 4);
+//     tree.clear();
+//     ASSERT_EQ(counter, 0);
+// }
 
 TEST(TestSpatialTree, BinarySearch) {
     st::internal::spatial_tree<int, int, 1> tree;

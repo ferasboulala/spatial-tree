@@ -20,7 +20,7 @@ struct opaque_data {
     opaque_data() {}
 };
 using coordinate_type = float;
-using tree_type = st::internal::spatial_tree<coordinate_type, void, 2, 8, 32>;
+using tree_type = st::internal::spatial_tree<coordinate_type, void, 2, 64, 32>;
 auto create_tree() {
     return tree_type(
         st::bounding_box<coordinate_type, 2>({BegTypeless, BegTypeless, EndTypeless, EndTypeless}));
@@ -55,12 +55,14 @@ void insertions(benchmark::State &state) {
         state.ResumeTiming();
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            tree.emplace({x, y});
+            tree.emplace({x, y}).second;
         }
+        state.PauseTiming();
         benchmark::ClobberMemory();
+        state.ResumeTiming();
     }
     state.counters["volume"] = tree.volume();
-    state.SetItemsProcessed(test_size * state.iterations());
+    state.SetItemsProcessed(state.iterations());
 }
 
 void insertions_duplicate(benchmark::State &state) {
