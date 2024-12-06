@@ -20,7 +20,7 @@ struct opaque_data {
     opaque_data() {}
 };
 using coordinate_type = float;
-using tree_type = st::internal::spatial_tree<coordinate_type, void, 2, 8, 32>;
+using tree_type = st::internal::spatial_tree<coordinate_type, void, 2, 128, 32>;
 auto create_tree() {
     return tree_type(
         st::bounding_box<coordinate_type, 2>({BegTypeless, BegTypeless, EndTypeless, EndTypeless}));
@@ -55,19 +55,20 @@ void insertions(benchmark::State &state) {
         state.ResumeTiming();
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            tree.emplace({x, y});
+            tree.emplace({x, y}).second;
         }
+        state.PauseTiming();
         benchmark::ClobberMemory();
+        state.ResumeTiming();
     }
     state.counters["volume"] = tree.volume();
-    state.SetItemsProcessed(test_size * state.iterations());
+    state.SetItemsProcessed(state.iterations());
 }
 
 void insertions_duplicate(benchmark::State &state) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(test_size);
     auto           tree = create_tree();
-    tree.clear();
     tree.reserve(test_size);
     for (uint64_t i = 0; i < test_size; ++i) {
         auto [x, y] = points[i];
@@ -90,7 +91,6 @@ void deletions(benchmark::State &state) {
 
     auto tree = create_tree();
     tree.reserve(test_size);
-    tree.clear();
     for (uint64_t i = 0; i < test_size; ++i) {
         auto [x, y] = points[i];
         tree.emplace({x, y});
@@ -103,7 +103,7 @@ void deletions(benchmark::State &state) {
         }
         benchmark::ClobberMemory();
     }
-    state.SetItemsProcessed(test_size * state.iterations());
+    state.SetItemsProcessed(state.iterations());
 }
 
 void deletions_non_existent(benchmark::State &state) {
@@ -112,7 +112,6 @@ void deletions_non_existent(benchmark::State &state) {
 
     auto tree = create_tree();
     tree.reserve(test_size);
-    tree.clear();
     for (uint64_t i = 0; i < test_size; ++i) {
         auto [x, y] = points[i];
         tree.emplace({x, y});
@@ -144,7 +143,6 @@ void find(benchmark::State &state) {
 
     auto tree = create_tree();
     tree.reserve(test_size);
-    tree.clear();
     for (uint64_t i = 0; i < test_size; ++i) {
         auto [x, y] = points[i];
         tree.emplace({x, y});
@@ -183,7 +181,6 @@ void find_single(benchmark::State &state) {
 
     auto tree = create_tree();
     tree.reserve(test_size);
-    tree.clear();
     for (uint64_t i = 0; i < test_size; ++i) {
         auto [x, y] = points[i];
         tree.emplace({x, y});
@@ -207,7 +204,6 @@ void nearest(benchmark::State &state) {
 
     auto tree = create_tree();
     tree.reserve(test_size);
-    tree.clear();
     for (uint64_t i = 0; i < test_size; ++i) {
         auto [x, y] = points[i];
         tree.emplace({x, y});
@@ -232,19 +228,21 @@ void iteration(benchmark::State &state) {
 
     auto tree = create_tree();
     tree.reserve(test_size);
-    for (auto _ : state) {
-        for (uint64_t i = 0; i < test_size; ++i) {
-            auto [x, y] = points[i];
-            tree.emplace({x, y});
-        }
+    for (uint64_t i = 0; i < test_size; ++i) {
+        auto [x, y] = points[i];
+        tree.emplace({x, y});
+    }
+
+    for (uint64_t i = 0; i < test_size; i += 4) {
+        auto [x, y] = points[i];
+        tree.erase({x, y});
     }
 
     for (auto _ : state) {
         int i = 0;
-        for (const auto &_ : tree) {
-            ++i;
+        for (const auto &entry : tree) {
+            benchmark::DoNotOptimize(++i);
         }
-        assert(i == test_size);
         benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(state.iterations() * test_size);

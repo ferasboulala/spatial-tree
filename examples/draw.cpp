@@ -56,7 +56,7 @@ int main() {
 
             std::vector<std::array<int32_t, 2> > points_to_erase;
             quadtree.find({min_x, min_y, max_x, max_y},
-                          [&](auto it) { points_to_erase.push_back(it); });
+                          [&](auto it) { points_to_erase.push_back(*it); });
             for (auto point : points_to_erase) {
                 quadtree.erase(point);
             }

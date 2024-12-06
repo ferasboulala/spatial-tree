@@ -276,13 +276,21 @@ TEST(TestSpatialTree, Destructors) {
             enabled = true;
             *counter = *counter + 1;
         }
-        inline MyObject(MyObject &&other) : enabled(other.enabled), counter(other.counter) {
+        inline MyObject(MyObject &&other) : enabled(true), counter(other.counter) {
+            other.enabled = false;
+        }
+        inline MyObject(const MyObject &other) : enabled(true), counter(other.counter) {
             *counter = *counter + 1;
         }
-        inline MyObject(const MyObject &other) : enabled(other.enabled), counter(other.counter) {
+        inline MyObject &operator=(const MyObject &other) {
+            enabled = true;
+            counter = other.counter;
             *counter = *counter + 1;
+
+            return *this;
         }
         inline ~MyObject() {
+            assert(enabled);
             enabled = false;
             *counter = *counter - 1;
         }
