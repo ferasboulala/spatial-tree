@@ -2957,7 +2957,7 @@ namespace internal {
 template <typename CoordinateType,
           typename StorageType,
           uint64_t Rank,
-          uint16_t MaximumLeafSize = 64,
+          uint16_t MaximumLeafSize = 128,
           uint8_t  IndexBitWidth = 64>
 class spatial_tree {
 private:
@@ -3100,11 +3100,11 @@ public:
 
     inline void reserve(uint64_t capacity) {
         assert(capacity);
-        leaves_.reserve(capacity);
         presence_.reserve(capacity);
+        leaves_.reserve(capacity / MaximumLeafSize);
         branches_.reserve(BranchingFactor * capacity / MaximumLeafSize);
     }
-    inline uint64_t capacity() const { return leaves_.capacity(); }
+    inline uint64_t capacity() const { return presence_.capacity(); }
     inline uint64_t volume() const {
         return branches_.size() - BranchingFactor * freed_branches_.size();
     }
@@ -3260,17 +3260,23 @@ private:
         explicit inline storage_data(StorageType&& d) noexcept : data(std::move(d)) {}
         explicit inline storage_data(const StorageType&& d) noexcept : data(d) {}
 
-        explicit inline storage_data(const storage_data& other) noexcept {
-            data = other.data;
-        }
+        explicit inline storage_data(const storage_data& other) noexcept { data = other.data; }
         explicit inline storage_data(storage_data&& other) noexcept {
             data = std::move(other.data);
         }
 
         inline storage_data& operator=(const storage_data& other) {
+            new (&data) StorageType(other.data);
             data = other.data;
             return *this;
         }
+
+        inline storage_data& operator=(storage_data&& other) {
+            new (&data) StorageType(std::move(other.data));
+            return *this;
+        }
+
+        inline storage_data() noexcept {}
 
         template <typename... Args>
         inline storage_data(Args&&... args) noexcept : data(std::forward<Args>(args)...) {}
@@ -3284,14 +3290,34 @@ private:
     struct tree_leaf {
         UnsignedIndexType                                             size;
         std::array<std::array<CoordinateType, Rank>, MaximumLeafSize> coordinates;
-        storage_container                                             items;
+        union {
+            storage_container items;
+        };
 
         inline tree_leaf() { reset(); }
+        inline tree_leaf(const tree_leaf& other) : size(other.size) {
+            for (uint64_t i = 0; i < size; ++i) {
+                coordinates[i] = other.coordinates[i];
+                if constexpr (!std::is_void_v<StorageType>) {
+                    items[i] = other.items[i];
+                }
+            }
+        }
+        inline tree_leaf(tree_leaf&& other) : size(other.size) {
+            for (uint64_t i = 0; i < size; ++i) {
+                coordinates[i] = other.coordinates[i];
+                if constexpr (!std::is_void_v<StorageType>) {
+                    items[i] = std::move(other.items[i]);
+                }
+            }
+        }
         inline ~tree_leaf() {
             if constexpr (!std::is_void_v<StorageType>) {
                 // TODO: Ensure that this is not called more than once.
-                for (uint64_t i = 0; i < size; ++i) {
-                    items[i].~storage_data();
+                if constexpr (!std::is_void_v<StorageType>) {
+                    for (uint64_t i = 0; i < size; ++i) {
+                        items[i].~storage_data();
+                    }
                 }
             }
         }
@@ -3304,10 +3330,8 @@ private:
 
         inline tree_branch() noexcept { reset(); }
         inline bool              is_terminal() const { return index_of_first_child < 0; }
-        inline UnsignedIndexType index() const {
-            return index_of_first_child * -1 - 1;
-        }
-        inline void index(UnsignedIndexType idx) {
+        inline UnsignedIndexType index() const { return index_of_first_child * -1 - 1; }
+        inline void              index(UnsignedIndexType idx) {
             index_of_first_child = SignedIndexType(idx + 1) * -1;
         }
         inline void reset() {
@@ -3354,7 +3378,7 @@ private:
         if (leaf.size < MaximumLeafSize) {
             internal::set<CoordinateType, Rank>(leaf.coordinates[leaf.size], point);
             if constexpr (!std::is_void_v<StorageType>) {
-                leaf.items[leaf.size] = std::move(storage_data(std::forward<Args>(args)...));
+                new (&leaf.items[leaf.size]) storage_data(std::forward<Args>(args)...);
             }
             ++leaf.size;
             return iterator(this, terminal_branch.index(), leaf.size - 1);
@@ -3399,7 +3423,7 @@ private:
                 emplace_recursively_helper(new_index_of_first_child,
                                            boundary,
                                            leaves_[index_of_freed_leaf].coordinates[i],
-                                           leaves_[index_of_freed_leaf].items[i].data);
+                                           std::move(leaves_[index_of_freed_leaf].items[i].data));
             }
         });
 
@@ -3419,7 +3443,7 @@ private:
             for (uint16_t i = 0; i < leaf.size; ++i) {
                 target_leaf.coordinates[target_leaf.size] = leaf.coordinates[i];
                 if constexpr (!std::is_void_v<StorageType>) {
-                    target_leaf.items[target_leaf.size] = leaf.items[i];
+                    target_leaf.items[target_leaf.size] = std::move(leaf.items[i]);
                 }
                 ++target_leaf.size;
             }
@@ -3451,12 +3475,16 @@ private:
             for (uint16_t i = 0; i < leaf.size; ++i) {
                 if (internal::equal<CoordinateType, Rank>(point, leaf.coordinates[i])) {
                     --branch.size;
+                    if constexpr (!std::is_void_v<StorageType>) {
+                        leaf.items[i].~storage_data();
+                    }
                     if (i != --leaf.size) {
                         leaf.coordinates[i] = leaf.coordinates[leaf.size];
                         if constexpr (!std::is_void_v<StorageType>) {
                             leaf.items[i] = std::move(leaf.items[leaf.size]);
                         }
                     }
+
                     return;
                 }
             }
