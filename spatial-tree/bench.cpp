@@ -16,7 +16,7 @@ static constexpr uint64_t BoundaryLow = 1 << 10;
 static constexpr uint64_t BoundaryHigh = 1 << 22;
 
 struct opaque_data {
-    char opaque[sizeof(void *)];
+    char opaque[64 * sizeof(void *)];
     opaque_data() {}
 };
 using coordinate_type = float;

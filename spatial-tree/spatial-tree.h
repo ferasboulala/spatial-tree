@@ -3154,7 +3154,7 @@ public:
                                              Args&&... args) {
         assert(boundary_.contains(point));
         auto [_, inserted] = presence_.emplace(point);
-        if (!inserted) {
+        if (!inserted) [[unlikely]] {
             return {find(point), false};
         }
 
@@ -3166,7 +3166,7 @@ public:
     inline bool erase(std::array<CoordinateType, Rank> point) {
         assert(boundary_.contains(point));
         auto erased = presence_.erase(point);
-        if (!erased) {
+        if (!erased) [[unlikely]] {
             return false;
         }
 
@@ -3180,7 +3180,7 @@ public:
     }
 
     /// TODO: Check why adding `inline` slows down insertions.
-    iterator find(std::array<CoordinateType, Rank> point) {
+    inline iterator find(std::array<CoordinateType, Rank> point) {
         std::array<CoordinateType, 2 * Rank> boundaries;
         internal::unroll_for<Rank>([&](auto i) {
             boundaries[i] = point[i];
@@ -3193,7 +3193,7 @@ public:
         return it;
     }
 
-    iterator find(std::array<CoordinateType, Rank> point) const {
+    inline iterator find(std::array<CoordinateType, Rank> point) const {
         std::array<CoordinateType, 2 * Rank> boundaries;
         internal::unroll_for<Rank>([&](auto i) {
             boundaries[i] = point[i];
@@ -3362,7 +3362,7 @@ private:
 
             tree_branch& branch = branches_[branch_index];
             ++branch.size;
-            if (branch.is_terminal()) {
+            if (branch.is_terminal()) [[unlikely]] {
                 break;
             }
 
@@ -3375,7 +3375,7 @@ private:
         assert(terminal_branch.index() < leaves_.size());
         tree_leaf& leaf = leaves_[terminal_branch.index()];
 
-        if (leaf.size < MaximumLeafSize) {
+        if (leaf.size < MaximumLeafSize) [[likely]] {
             internal::set<CoordinateType, Rank>(leaf.coordinates[leaf.size], point);
             if constexpr (!std::is_void_v<StorageType>) {
                 new (&leaf.items[leaf.size]) storage_data(std::forward<Args>(args)...);
@@ -3470,7 +3470,7 @@ private:
         assert(branch_index < branches_.size());
 
         tree_branch& branch = branches_[branch_index];
-        if (branch.is_terminal()) {
+        if (branch.is_terminal()) [[unlikely]] {
             tree_leaf& leaf = leaves_[branch.index()];
             for (uint16_t i = 0; i < leaf.size; ++i) {
                 if (internal::equal<CoordinateType, Rank>(point, leaf.coordinates[i])) {
@@ -3532,7 +3532,7 @@ private:
         assert(branch_index < branches_.size());
 
         tree_branch& node = branches_[branch_index];
-        if (node.is_terminal()) {
+        if (node.is_terminal()) [[unlikely]] {
             tree_leaf& leaf = leaves_[node.index()];
             for (uint64_t i = 0; i < node.size; ++i) {
                 if (Encompasses || bbox.contains(leaf.coordinates[i])) {
@@ -3571,7 +3571,7 @@ private:
 
         tree_branch& node = branches_[branch_index];
 
-        if (node.is_terminal()) {
+        if (node.is_terminal()) [[unlikely]] {
             for (uint64_t i = 0; i < node.size; ++i) {
                 tree_leaf&     leaf = leaves_[node.index()];
                 CoordinateType distance = euclidean_distance_squared_arr<CoordinateType, Rank>(
