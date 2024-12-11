@@ -2576,14 +2576,20 @@ using unordered_set = detail::Table<sizeof(Key) <= sizeof(size_t) * 6 &&
 
 #if defined(__gnu_compiler)
 #define __unroll_2 _Pragma("GCC unroll 2")
-#define __unroll_3 _Pragma("GCC unroll 3")
 #define __unroll_4 _Pragma("GCC unroll 4")
 #define __unroll_8 _Pragma("GCC unroll 8")
+#define __unroll_16 _Pragma("GCC unroll 16")
+#define __unroll_32 _Pragma("GCC unroll 32")
+#define __unroll_64 _Pragma("GCC unroll 64")
+#define __unroll_128 _Pragma("GCC unroll 128")
 #elif defined(__clang_compiler)
 #define __unroll_2 _Pragma("clang loop unroll_count(2)")
-#define __unroll_3 _Pragma("clang loop unroll_count(3)")
 #define __unroll_4 _Pragma("clang loop unroll_count(4)")
 #define __unroll_8 _Pragma("clang loop unroll_count(8)")
+#define __unroll_16 _Pragma("clang loop unroll_count(16)")
+#define __unroll_32 _Pragma("clang loop unroll_count(32)")
+#define __unroll_64 _Pragma("clang loop unroll_count(64)")
+#define __unroll_128 _Pragma("clang loop unroll_count(128)")
 #endif
 
 #include <cassert>
@@ -2604,14 +2610,20 @@ template <uint64_t factor, typename Func, typename InductionVarType = uint64_t>
 inline void unroll_for(InductionVarType start, InductionVarType stop, const Func& func) {
     if constexpr (factor == 2) {
         __unroll_2 for (InductionVarType i = start; i < stop; ++i) { func(i); }
-    } else if (factor == 3) {
-        __unroll_3 for (InductionVarType i = start; i < stop; ++i) { func(i); }
     } else if (factor == 4) {
         __unroll_4 for (InductionVarType i = start; i < stop; ++i) { func(i); }
     } else if (factor == 8) {
         __unroll_8 for (InductionVarType i = start; i < stop; ++i) { func(i); }
+    } else if (factor == 16) {
+        __unroll_16 for (InductionVarType i = start; i < stop; ++i) { func(i); }
+    } else if (factor == 32) {
+        __unroll_32 for (InductionVarType i = start; i < stop; ++i) { func(i); }
+    } else if (factor == 64) {
+        __unroll_64 for (InductionVarType i = start; i < stop; ++i) { func(i); }
+    } else if (factor == 128) {
+        __unroll_128 for (InductionVarType i = start; i < stop; ++i) { func(i); }
     } else {
-        __unroll_2 for (InductionVarType i = start; i < stop; ++i) { func(i); }
+        __unroll_4 for (InductionVarType i = start; i < stop; ++i) { func(i); }
     }
 }
 
@@ -2619,14 +2631,20 @@ template <uint64_t factor, typename Func>
 inline void unroll_for(const Func& func) {
     if constexpr (factor == 2) {
         __unroll_2 for (uint64_t i = 0; i < factor; ++i) { func(i); }
-    } else if (factor == 3) {
-        __unroll_3 for (uint64_t i = 0; i < factor; ++i) { func(i); }
     } else if (factor == 4) {
         __unroll_4 for (uint64_t i = 0; i < factor; ++i) { func(i); }
     } else if (factor == 8) {
         __unroll_8 for (uint64_t i = 0; i < factor; ++i) { func(i); }
+    } else if (factor == 16) {
+        __unroll_16 for (uint64_t i = 0; i < factor; ++i) { func(i); }
+    } else if (factor == 32) {
+        __unroll_32 for (uint64_t i = 0; i < factor; ++i) { func(i); }
+    } else if (factor == 64) {
+        __unroll_64 for (uint64_t i = 0; i < factor; ++i) { func(i); }
+    } else if (factor == 128) {
+        __unroll_128 for (uint64_t i = 0; i < factor; ++i) { func(i); }
     } else {
-        __unroll_2 for (uint64_t i = 0; i < factor; ++i) { func(i); }
+        __unroll_4 for (uint64_t i = 0; i < factor; ++i) { func(i); }
     }
 }
 
@@ -2789,9 +2807,9 @@ inline bool intervals_encompasses(CoordinateType lhs_beg,
 }  // namespace internal
 
 enum class OverlappingMode {
-    Disjoint,
-    Overlaps,
-    Encompasses,
+    Disjoint = 0,
+    Overlaps = 1,
+    Encompasses = 2,
 };
 
 template <typename CoordinateType, uint64_t Rank>
@@ -2904,7 +2922,7 @@ struct bounding_box {
             // Contract: lower region is ceiled, upper region is floored. (>)
             bool gt = point[i] > origins[i];
 
-            // Faster than branchless.
+            // Faster than branchless. Compiler will do more optimizations with this.
             if (gt) {
                 boundary[i] = starts[i] + new_span;
                 boundary[i + Rank] = stops[i];
@@ -3288,7 +3306,7 @@ private:
                                                storage_container_empty,
                                                std::array<storage_data, MaximumLeafSize>>::type;
     struct tree_leaf {
-        UnsignedIndexType                                             size;
+        uint16_t                                                      size;
         std::array<std::array<CoordinateType, Rank>, MaximumLeafSize> coordinates;
         union {
             storage_container items;
@@ -3296,28 +3314,27 @@ private:
 
         inline tree_leaf() { reset(); }
         inline tree_leaf(const tree_leaf& other) : size(other.size) {
-            for (uint64_t i = 0; i < size; ++i) {
+            internal::unroll_for<4>(uint16_t(0), size, [&](auto i) {
                 coordinates[i] = other.coordinates[i];
                 if constexpr (!std::is_void_v<StorageType>) {
                     items[i] = other.items[i];
                 }
-            }
+            });
         }
         inline tree_leaf(tree_leaf&& other) : size(other.size) {
-            for (uint64_t i = 0; i < size; ++i) {
+            internal::unroll_for<4>(uint16_t(0), size, [&](auto i) {
                 coordinates[i] = other.coordinates[i];
                 if constexpr (!std::is_void_v<StorageType>) {
                     items[i] = std::move(other.items[i]);
                 }
-            }
+            });
         }
         inline ~tree_leaf() {
             if constexpr (!std::is_void_v<StorageType>) {
                 // TODO: Ensure that this is not called more than once.
                 if constexpr (!std::is_void_v<StorageType>) {
-                    for (uint64_t i = 0; i < size; ++i) {
-                        items[i].~storage_data();
-                    }
+                    internal::unroll_for<4>(
+                        uint16_t(0), size, [&](auto i) { items[i].~storage_data(); });
                 }
             }
         }
@@ -3380,8 +3397,7 @@ private:
             if constexpr (!std::is_void_v<StorageType>) {
                 new (&leaf.items[leaf.size]) storage_data(std::forward<Args>(args)...);
             }
-            ++leaf.size;
-            return iterator(this, terminal_branch.index(), leaf.size - 1);
+            return iterator(this, terminal_branch.index(), leaf.size++);
         }
 
         uint64_t index_of_freed_leaf = terminal_branch.index();
@@ -3434,7 +3450,7 @@ private:
             new_index_of_first_child, boundary, point, std::forward<Args>(args)...);
     }
 
-    inline void recursively_gather_points(uint64_t branch_index, tree_leaf& target_leaf) {
+    void recursively_gather_points(uint64_t branch_index, tree_leaf& target_leaf) {
         assert(branch_index < branches_.size());
 
         tree_branch& branch = branches_[branch_index];
@@ -3471,25 +3487,25 @@ private:
 
         tree_branch& branch = branches_[branch_index];
         if (branch.is_terminal()) [[unlikely]] {
+            --branch.size;
             tree_leaf& leaf = leaves_[branch.index()];
-            for (uint16_t i = 0; i < leaf.size; ++i) {
-                if (internal::equal<CoordinateType, Rank>(point, leaf.coordinates[i])) {
-                    --branch.size;
-                    if constexpr (!std::is_void_v<StorageType>) {
-                        leaf.items[i].~storage_data();
-                    }
-                    if (i != --leaf.size) {
-                        leaf.coordinates[i] = leaf.coordinates[leaf.size];
-                        if constexpr (!std::is_void_v<StorageType>) {
-                            leaf.items[i] = std::move(leaf.items[leaf.size]);
-                        }
-                    }
+            auto       it =
+                std::find(leaf.coordinates.begin(), leaf.coordinates.begin() + leaf.size, point);
+            assert(it != leaf.coordinates.begin() + leaf.size);
 
-                    return;
+            uint16_t i = std::distance(leaf.coordinates.begin(), it);
+            if constexpr (!std::is_void_v<StorageType>) {
+                leaf.items[i].~storage_data();
+            }
+            if (i != --leaf.size) {
+                leaf.coordinates[i] = leaf.coordinates[leaf.size];
+                if constexpr (!std::is_void_v<StorageType>) {
+                    leaf.items[i] = std::move(leaf.items[leaf.size]);
                 }
             }
-            assert(false && "Unreachable");
-            abort();
+
+            assert(branch.size == leaf.size);
+            return;
         }
 
         const auto [new_boundary, selected_quad] = boundary.recurse(point);

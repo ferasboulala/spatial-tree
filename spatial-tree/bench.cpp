@@ -91,13 +91,14 @@ void deletions(benchmark::State &state) {
 
     auto tree = create_tree();
     tree.reserve(test_size);
-    for (uint64_t i = 0; i < test_size; ++i) {
-        auto [x, y] = points[i];
-        tree.emplace({x, y});
-    }
-
     for (auto _ : state) {
+        state.PauseTiming();
         for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = points[i];
+            tree.emplace({x, y});
+        }
+        state.ResumeTiming();
+        for (int64_t i = test_size; i >= 0; --i) {
             auto [x, y] = points[i];
             tree.erase({x, y});
         }
