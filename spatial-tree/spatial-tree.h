@@ -3004,16 +3004,15 @@ public:
 
         inline iterator(const this_type*  tree,
                         UnsignedIndexType leaf_index,
-                        UnsignedIndexType item_index) noexcept
+                        UnsignedIndexType item_index)
             : leaf_index_(leaf_index), item_index_(item_index), tree_(tree) {}
 
-        inline iterator(const this_type* tree) noexcept
-            : leaf_index_(0), item_index_(0), tree_(tree) {}
+        inline iterator(const this_type* tree) : leaf_index_(0), item_index_(0), tree_(tree) {}
 
-        inline iterator(const iterator& other) noexcept
+        inline iterator(const iterator& other)
             : leaf_index_(other.leaf_index_), item_index_(other.item_index_), tree_(other.tree_) {}
 
-        inline iterator(iterator&& other) noexcept
+        inline iterator(iterator&& other)
             : leaf_index_(other.leaf_index_), item_index_(other.item_index_), tree_(other.tree_) {}
 
         inline iterator& operator=(const iterator& other) {
@@ -3105,16 +3104,13 @@ public:
         const this_type*  tree_;
     };
 
-    spatial_tree() noexcept { clear(); }
-    spatial_tree(const bounding_box<CoordinateType, Rank>& boundary) noexcept
-        : boundary_(boundary) {
+    spatial_tree() { clear(); }
+    spatial_tree(const bounding_box<CoordinateType, Rank>& boundary) : boundary_(boundary) {
         clear();
     }
-    spatial_tree(std::initializer_list<CoordinateType> boundary) noexcept : boundary_(boundary) {
-        clear();
-    }
+    spatial_tree(std::initializer_list<CoordinateType> boundary) : boundary_(boundary) { clear(); }
 
-    ~spatial_tree() noexcept = default;
+    ~spatial_tree() = default;
 
     inline void reserve(uint64_t capacity) {
         assert(capacity);
@@ -3341,7 +3337,7 @@ private:
         UnsignedIndexType size;
         SignedIndexType   index_of_first_child;
 
-        inline tree_branch() noexcept { reset(); }
+        inline tree_branch() { reset(); }
         inline bool              is_terminal() const { return index_of_first_child < 0; }
         inline UnsignedIndexType index() const { return index_of_first_child * -1 - 1; }
         inline void              index(UnsignedIndexType idx) {
