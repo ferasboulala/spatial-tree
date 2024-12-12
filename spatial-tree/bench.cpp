@@ -78,7 +78,7 @@ void insertions_duplicate(benchmark::State &state) {
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            tree.emplace({x, y});
+            benchmark::DoNotOptimize(tree.emplace({x, y}));
         }
         benchmark::ClobberMemory();
     }
@@ -98,7 +98,7 @@ void insertions_try_duplicate(benchmark::State &state) {
     for (auto _ : state) {
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            tree.try_emplace({x, y});
+            benchmark::DoNotOptimize(tree.try_emplace({x, y}));
         }
         benchmark::ClobberMemory();
     }
@@ -219,6 +219,34 @@ void find_single(benchmark::State &state) {
     state.SetItemsProcessed(n_points_to_find * state.iterations());
 }
 
+void contains(benchmark::State &state) {
+    static constexpr coordinate_type BEG = BegTypeless;
+    static constexpr coordinate_type END = EndTypeless;
+    static constexpr double          AREA = (END - BEG) * (END - BEG);
+    static_assert(AREA > BEG && AREA > END);
+
+    const uint64_t test_size = state.range(0);
+    const auto     points = generate_points(test_size);
+
+    auto tree = create_tree();
+    tree.reserve(test_size);
+    for (uint64_t i = 0; i < test_size; ++i) {
+        auto [x, y] = points[i];
+        tree.emplace({x, y});
+    }
+
+    static constexpr uint64_t n_points_to_find = 1 << 24;
+    const auto                points_to_find = generate_points(n_points_to_find);
+
+    for (auto _ : state) {
+        for (auto [x, y] : points_to_find) {
+            benchmark::DoNotOptimize(tree.contains({x, y}));
+        }
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(n_points_to_find * state.iterations());
+}
+
 void nearest(benchmark::State &state) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(test_size);
@@ -276,6 +304,7 @@ BENCHMARK(deletions)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(deletions_non_existent)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(find)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(find_single)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
+BENCHMARK(contains)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(nearest)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(iteration)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 

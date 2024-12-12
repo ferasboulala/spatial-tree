@@ -3182,7 +3182,7 @@ public:
                                                  Args&&... args) {
         assert(boundary_.contains(point));
         auto [_, inserted] = presence_.emplace(point);
-        if (!inserted) [[unlikely]] {
+        if (!inserted) {
             return {end(), false};
         }
 
@@ -3236,29 +3236,19 @@ public:
     }
 
     auto nearest(std::array<CoordinateType, Rank> point) {
-        CoordinateType nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
-        if constexpr (std::is_void_v<StorageType>) {
-            std::vector<std::array<CoordinateType, Rank>> results;
-            nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
-            return results;
-        } else {
-            std::vector<std::pair<std::array<CoordinateType, Rank>, StorageType&>> results;
-            nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
-            return results;
-        }
+        CoordinateType        nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
+        std::vector<iterator> results;
+        nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
+
+        return results;
     }
 
     auto nearest(std::array<CoordinateType, Rank> point) const {
-        CoordinateType nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
-        if constexpr (std::is_void_v<StorageType>) {
-            std::vector<std::array<CoordinateType, Rank>> results;
-            nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
-            return results;
-        } else {
-            std::vector<std::pair<std::array<CoordinateType, Rank>, const StorageType&>> results;
-            nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
-            return results;
-        }
+        CoordinateType        nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
+        std::vector<iterator> results;
+        nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
+
+        return results;
     }
 
 private:
@@ -3590,19 +3580,18 @@ private:
         });
     }
 
-    template <typename MaybeConstType>
     void nearest_recursively(uint64_t                                  branch_index,
                              const bounding_box<CoordinateType, Rank>& boundary,
                              std::array<CoordinateType, Rank>          point,
                              CoordinateType&                           nearest_distance_squared,
-                             std::vector<MaybeConstType>&              results) {
+                             std::vector<iterator>&                    results) {
         assert(branch_index < branches_.size());
 
         tree_branch& node = branches_[branch_index];
 
         if (node.is_terminal()) [[unlikely]] {
+            tree_leaf&     leaf = leaves_[node.index()];
             for (uint64_t i = 0; i < node.size; ++i) {
-                tree_leaf&     leaf = leaves_[node.index()];
                 CoordinateType distance = euclidean_distance_squared_arr<CoordinateType, Rank>(
                     point, leaf.coordinates[i]);
                 if (distance > nearest_distance_squared) {
@@ -3614,11 +3603,7 @@ private:
                     nearest_distance_squared = distance;
                 }
 
-                if constexpr (std::is_void_v<StorageType>) {
-                    results.emplace_back(MaybeConstType(leaf.coordinates[i]));
-                } else {
-                    results.emplace_back(MaybeConstType(leaf.coordinates[i], leaf.items[i].data));
-                }
+                results.emplace_back(this, node.index(), i);
             }
             return;
         }

@@ -768,7 +768,7 @@ TEST(TestSpatialTree, Nearest) {
                     ASSERT_FALSE(nearest_points.empty());
                     ASSERT_TRUE(
                         std::all_of(nearest_points.begin(), nearest_points.end(), [&](auto it) {
-                            const auto [p2, nearest_val2] = it;
+                            const auto [p2, nearest_val2] = *it;
                             const CoordT distance2 =
                                 st::internal::euclidean_distance_squared(x_, p2[0], y_, p2[1]);
                             return distance2 == distance1;
