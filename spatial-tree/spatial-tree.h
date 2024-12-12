@@ -3181,6 +3181,20 @@ public:
         return {it, true};
     }
 
+    template <typename... Args>
+    inline std::pair<iterator, bool> try_emplace(std::array<CoordinateType, Rank> point,
+                                                 Args&&... args) {
+        assert(boundary_.contains(point));
+        auto [_, inserted] = presence_.emplace(point);
+        if (!inserted) [[unlikely]] {
+            return {end(), false};
+        }
+
+        auto it = emplace_recursively(0, boundary_, point, std::forward<Args>(args)...);
+
+        return {it, true};
+    }
+
     inline bool erase(std::array<CoordinateType, Rank> point) {
         assert(boundary_.contains(point));
         auto erased = presence_.erase(point);
@@ -3199,29 +3213,11 @@ public:
 
     /// TODO: Check why adding `inline` slows down insertions.
     inline iterator find(std::array<CoordinateType, Rank> point) {
-        std::array<CoordinateType, 2 * Rank> boundaries;
-        internal::unroll_for<Rank>([&](auto i) {
-            boundaries[i] = point[i];
-            boundaries[i + Rank] = point[i];
-        });
-        bounding_box<CoordinateType, Rank> bbox(boundaries);
-        auto                               it = end();
-        find_recursively(bbox, boundary_, 0, [&](auto it_) { it = it_; });
-
-        return it;
+        return find_recursively_single(point, boundary_, 0);
     }
 
     inline iterator find(std::array<CoordinateType, Rank> point) const {
-        std::array<CoordinateType, 2 * Rank> boundaries;
-        internal::unroll_for<Rank>([&](auto i) {
-            boundaries[i] = point[i];
-            boundaries[i + Rank] = point[i];
-        });
-        bounding_box<CoordinateType, Rank> bbox(boundaries);
-        auto                               it = end();
-        find_recursively(bbox, boundary_, 0, [&](auto it_) { it = it_; });
-
-        return it;
+        return find_recursively_single(point, boundary_, 0);
     }
 
     template <typename Func>
@@ -3538,8 +3534,29 @@ private:
         assert(branch.size <= MaximumLeafSize);
     }
 
-    // TODO: Remove the Encompasses parameter and instead create a different function without the
-    // boundary argument.
+    inline iterator find_recursively_single(std::array<CoordinateType, Rank>   point,
+                                            bounding_box<CoordinateType, Rank> boundary,
+                                            uint64_t                           branch_index) {
+        assert(branch_index < branches_.size());
+
+        while (true) {
+            tree_branch& node = branches_[branch_index];
+            if (node.is_terminal()) [[unlikely]] {
+                tree_leaf& leaf = leaves_[node.index()];
+                auto       it = std::find(
+                    leaf.coordinates.begin(), leaf.coordinates.begin() + leaf.size, point);
+                if (it == leaf.coordinates.begin() + leaf.size) {
+                    return end();
+                }
+                return iterator(this, node.index(), std::distance(leaf.coordinates.begin(), it));
+            }
+
+            const auto [new_boundary, selected_quad] = boundary.recurse(point);
+            boundary = new_boundary;
+            branch_index = node.index_of_first_child + selected_quad;
+        }
+    }
+
     template <typename Func, bool Encompasses = false>
     inline void find_recursively(const bounding_box<CoordinateType, Rank>& bbox,
                                  const bounding_box<CoordinateType, Rank>& boundary,
