@@ -3138,7 +3138,7 @@ public:
 
     template <typename Func>
     void walk(Func func) const {
-        const std::function<void(uint64_t, const bounding_box<CoordinateType, Rank>&)>
+        const std::function<void(UnsignedIndexType, const bounding_box<CoordinateType, Rank>&)>
             walk_recursively = [&](auto branch_index, auto boundary) {
                 assert(branch_index < branches_.size());
                 const tree_branch& branch = branches_[branch_index];
@@ -3198,7 +3198,7 @@ public:
             return false;
         }
 
-        erase_recursively(0, boundary_, std::numeric_limits<uint64_t>::max(), point);
+        erase_recursively(0, boundary_, std::numeric_limits<UnsignedIndexType>::max(), point);
 
         return true;
     }
@@ -3340,7 +3340,7 @@ private:
     };
 
     template <typename... Args>
-    inline iterator emplace_recursively_helper(uint64_t index_of_first_child,
+    inline iterator emplace_recursively_helper(UnsignedIndexType index_of_first_child,
                                                const bounding_box<CoordinateType, Rank>& boundary,
                                                std::array<CoordinateType, Rank>          point,
                                                Args&&... args) {
@@ -3350,7 +3350,7 @@ private:
     }
 
     template <typename... Args>
-    iterator emplace_recursively(uint64_t                                  branch_index,
+    iterator emplace_recursively(UnsignedIndexType                         branch_index,
                                  const bounding_box<CoordinateType, Rank>& _boundary,
                                  std::array<CoordinateType, Rank>          point,
                                  Args&&... args) {
@@ -3382,8 +3382,8 @@ private:
             return iterator(this, terminal_branch.index(), leaf.size++);
         }
 
-        uint64_t index_of_freed_leaf = terminal_branch.index();
-        uint64_t new_index_of_first_child;
+        UnsignedIndexType index_of_freed_leaf = terminal_branch.index();
+        UnsignedIndexType new_index_of_first_child;
         /// TODO: Do this in a helper arena class.
         if (!freed_branches_.empty()) {
             new_index_of_first_child = freed_branches_.back();
@@ -3432,7 +3432,7 @@ private:
             new_index_of_first_child, boundary, point, std::forward<Args>(args)...);
     }
 
-    void recursively_gather_points(uint64_t branch_index, tree_leaf& target_leaf) {
+    void recursively_gather_points(UnsignedIndexType branch_index, tree_leaf& target_leaf) {
         assert(branch_index < branches_.size());
 
         tree_branch& branch = branches_[branch_index];
@@ -3461,9 +3461,9 @@ private:
         branch.reset();
     }
 
-    inline void erase_recursively(uint64_t                                  branch_index,
+    inline void erase_recursively(UnsignedIndexType                         branch_index,
                                   const bounding_box<CoordinateType, Rank>& boundary,
-                                  uint64_t                         parent_size_after_removal,
+                                  UnsignedIndexType                parent_size_after_removal,
                                   std::array<CoordinateType, Rank> point) {
         assert(branch_index < branches_.size());
 
@@ -3503,7 +3503,7 @@ private:
             return;
         }
 
-        uint64_t index_of_first_child = branch.index_of_first_child;
+        UnsignedIndexType index_of_first_child = branch.index_of_first_child;
         if (!freed_leaves_.empty()) {
             branch.index(freed_leaves_.back());
             assert(leaves_[branch.index()].size == 0);
@@ -3522,7 +3522,7 @@ private:
 
     inline iterator find_recursively_single(std::array<CoordinateType, Rank>   point,
                                             bounding_box<CoordinateType, Rank> boundary,
-                                            uint64_t                           branch_index) {
+                                            UnsignedIndexType                  branch_index) {
         assert(branch_index < branches_.size());
 
         while (true) {
@@ -3546,7 +3546,7 @@ private:
     template <typename Func, bool Encompasses = false>
     inline void find_recursively(const bounding_box<CoordinateType, Rank>& bbox,
                                  const bounding_box<CoordinateType, Rank>& boundary,
-                                 uint64_t                                  branch_index,
+                                 UnsignedIndexType                         branch_index,
                                  Func                                      func) {
         assert(branch_index < branches_.size());
 
@@ -3580,7 +3580,7 @@ private:
         });
     }
 
-    void nearest_recursively(uint64_t                                  branch_index,
+    void nearest_recursively(UnsignedIndexType                         branch_index,
                              const bounding_box<CoordinateType, Rank>& boundary,
                              std::array<CoordinateType, Rank>          point,
                              CoordinateType&                           nearest_distance_squared,
@@ -3590,7 +3590,7 @@ private:
         tree_branch& node = branches_[branch_index];
 
         if (node.is_terminal()) [[unlikely]] {
-            tree_leaf&     leaf = leaves_[node.index()];
+            tree_leaf& leaf = leaves_[node.index()];
             for (uint64_t i = 0; i < node.size; ++i) {
                 CoordinateType distance = euclidean_distance_squared_arr<CoordinateType, Rank>(
                     point, leaf.coordinates[i]);
@@ -3633,11 +3633,11 @@ private:
 
     const bounding_box<CoordinateType, Rank> boundary_;
 
-    std::vector<tree_branch> branches_;
-    std::vector<uint64_t>    freed_branches_;
+    std::vector<tree_branch>       branches_;
+    std::vector<UnsignedIndexType> freed_branches_;
 
-    std::vector<tree_leaf> leaves_;
-    std::vector<uint64_t>  freed_leaves_;
+    std::vector<tree_leaf>         leaves_;
+    std::vector<UnsignedIndexType> freed_leaves_;
 
     robin_hood::unordered_set<std::array<CoordinateType, Rank>,
                               internal::point_hash<CoordinateType, Rank>,

@@ -55,7 +55,7 @@ void insertions(benchmark::State &state) {
         state.ResumeTiming();
         for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
-            tree.try_emplace({x, y}).second;
+            benchmark::DoNotOptimize(tree.try_emplace({x, y}));
         }
         state.PauseTiming();
         benchmark::ClobberMemory();
