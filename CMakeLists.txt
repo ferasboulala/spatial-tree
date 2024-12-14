@@ -23,7 +23,7 @@ endif()
 
 # Set C++ standard and output directories.
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(ALL_LIBRARIES)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../bin/")
@@ -31,7 +31,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../bin/")
 # Build the API example when not compiling for web.
 if (NOT USE_EMSCRIPTEN)
   add_executable("api" examples/api.cpp)
+  add_executable("n-body" examples/n-body.cpp)
   target_include_directories("api" PUBLIC "${CMAKE_SOURCE_DIR}/spatial-tree")
+  target_include_directories("n-body" PUBLIC "${CMAKE_SOURCE_DIR}/spatial-tree")
 endif()
 
 set(BENCHMARK_ENABLE_GTEST_TESTS OFF)
