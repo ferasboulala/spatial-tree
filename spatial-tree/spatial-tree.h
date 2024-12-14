@@ -2978,7 +2978,7 @@ template <typename CoordinateType,
           uint16_t MaximumLeafSize = 128,
           uint8_t  IndexBitWidth = 64>
 class spatial_tree {
-private:
+protected:
     static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8,
                   "Rank must be greater than 0 and less than 64");
     static_assert(MaximumLeafSize > 0, "Maximum node size must be greater than 1");
@@ -3111,6 +3111,11 @@ public:
     spatial_tree(std::initializer_list<CoordinateType> boundary) : boundary_(boundary) { clear(); }
 
     ~spatial_tree() = default;
+
+    inline void reset(const bounding_box<CoordinateType, Rank>& boundary) {
+        boundary_ = boundary;
+        clear();
+    }
 
     inline void reserve(uint64_t capacity) {
         assert(capacity);
@@ -3631,7 +3636,8 @@ private:
         });
     }
 
-    const bounding_box<CoordinateType, Rank> boundary_;
+protected:
+    bounding_box<CoordinateType, Rank> boundary_;
 
     std::vector<tree_branch>       branches_;
     std::vector<UnsignedIndexType> freed_branches_;

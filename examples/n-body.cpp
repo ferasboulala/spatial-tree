@@ -1,181 +1,240 @@
+#include <raylib.h>
+
 #include <iostream>
+#include <random>
 
 #include "spatial-tree.h"
 
-template <typename CoordinateType = float,
-          typename MassType = float,
-          uint64_t Rank = 2,
-          uint16_t MaximumLeafSize = 128>
-struct barnes_hut {
+static constexpr int Rank = 2;
+static constexpr int MaximumLeafSize = 128;
+using CoordinateType = float;
+static constexpr CoordinateType R = 1;
+using MassType = float;
+
+struct n_body_data {
+    std::array<CoordinateType, Rank> position;
+    std::array<CoordinateType, Rank> velocity;
+    MassType                         mass;
+};
+
+struct n_body_tree_data {
+    std::array<CoordinateType, Rank> velocity;
+    MassType                         mass;
+};
+
+class barnes_hut : public st::internal::
+                       spatial_tree<CoordinateType, n_body_tree_data, Rank, MaximumLeafSize, 32> {
+    using spatial_tree_type =
+        st::internal::spatial_tree<CoordinateType, n_body_tree_data, Rank, MaximumLeafSize, 32>;
+
+public:
     barnes_hut() = default;
     ~barnes_hut() = default;
-    static constexpr uint64_t BranchingFactor = st::internal::pow(2, Rank);
 
     void build(const auto& points) {
-        branches_.clear();
-        branches_.resize(1);
-        leaves_.clear();
-        leaves_.resize(1);
-        freed_leaves_.clear();
-        presence_.clear();
+        st::bounding_box<CoordinateType, Rank> boundary;
+        boundary.stops.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
+        boundary.starts.fill(std::numeric_limits<CoordinateType>::max() / 2);
 
-        st::bounding_box<CoordinateType, Rank> boundary_;
-        boundary_ = decltype(boundary_)();
-        for (const auto& [position, _] : points) {
+        for (const auto& point : points) {
+            assert(point.mass);
             st::internal::unroll_for<Rank>([&](auto i) {
-                boundary_.starts[i] = std::max(position[i], boundary_.starts[i]) - 1;
-                boundary_.stops[i] = std::min(position[i], boundary_.stops[i]) + 1;
+                boundary.starts[i] = std::min(point.position[i], boundary.starts[i]);
+                boundary.stops[i] = std::max(point.position[i], boundary.stops[i]);
             });
         }
 
-        std::cout << "Boundaries are: \n";
-        st::internal::unroll_for<Rank>(
-            [&](auto i) { std::cout << boundary_.starts[i] << " " << boundary_.stops[i] << "\n"; });
-
-        for (const auto& [position, mass] : points) {
-            auto inserted = emplace(position, mass);
-            assert(inserted);
+        this->reset(boundary);
+        for (const auto& point : points) {
+            auto inserted =
+                this->emplace(point.position, n_body_tree_data{point.velocity, point.mass});
+            assert(inserted.second);
         }
     }
 
-    void propagate();
-    void update();
+    void propagate() {
+        branch_data_.resize(this->branches_.size());
+        for (int64_t i = this->branches_.size() - 1; i >= 0; --i) {
+            const auto& branch = this->branches_[i];
+            auto&       branch_data_entry = branch_data_[i];
+            branch_data_entry.mass = 0;
+            branch_data_entry.position = {0};
 
-    struct tree_leaf {
-        uint16_t                                                      size;
-        std::array<std::array<CoordinateType, Rank>, MaximumLeafSize> coordinates;
-        std::array<MassType, MaximumLeafSize>                         masses;
+            if (branch.is_terminal()) {
+                auto& leaf = this->leaves_[branch.index()];
+                std::for_each(leaf.coordinates.begin(),
+                              leaf.coordinates.begin() + leaf.size,
+                              [&](auto position) {
+                                  st::internal::unroll_for<Rank>([&](auto i) {
+                                      branch_data_entry.position[i] += position[i];
+                                  });
+                              });
+                std::for_each(leaf.items.begin(),
+                              leaf.items.begin() + leaf.size,
+                              [&](const auto& data) { branch_data_entry.mass += data.data.mass; });
 
-        inline tree_leaf() { reset(); }
-        inline tree_leaf(const tree_leaf& other) : size(other.size) {
-            st::internal::unroll_for<4>(uint16_t(0), size, [&](auto i) {
-                coordinates[i] = other.coordinates[i];
-                masses[i] = other.masses[i];
-            });
-        }
-        inline tree_leaf(tree_leaf&& other) : size(other.size) {
-            st::internal::unroll_for<4>(uint16_t(0), size, [&](auto i) {
-                coordinates[i] = other.coordinates[i];
-                masses[i] = other.masses[i];
-            });
-        }
-        inline void reset() { size = 0; }
-    };
-
-    struct tree_branch {
-        uint32_t size;
-        int32_t  index_of_first_child;
-
-        inline tree_branch() { reset(); }
-        inline bool     is_terminal() const { return index_of_first_child < 0; }
-        inline uint32_t index() const { return index_of_first_child * -1 - 1; }
-        inline void     index(uint32_t idx) { index_of_first_child = int32_t(idx + 1) * -1; }
-        inline void     reset() {
-            size = 0;
-            index_of_first_child = -1;
-        }
-    };
-
-    inline bool emplace(std::array<CoordinateType, Rank> point, MassType mass) {
-        assert(boundary_.contains(point));
-        auto [_, inserted] = presence_.emplace(point);
-        if (!inserted) [[unlikely]] {
-            return false;
-        }
-
-        emplace_recursively(0, boundary_, point, mass);
-
-        return true;
-    }
-
-    inline void emplace_recursively_helper(uint32_t index_of_first_child,
-                                           const st::bounding_box<CoordinateType, Rank>& boundary,
-                                           std::array<CoordinateType, Rank>              point,
-                                           MassType                                      mass) {
-        const auto [new_boundary, selected_quad] = boundary.recurse(point);
-        return emplace_recursively(index_of_first_child + selected_quad, new_boundary, point, mass);
-    }
-
-    void emplace_recursively(uint32_t                                      branch_index,
-                             const st::bounding_box<CoordinateType, Rank>& _boundary,
-                             std::array<CoordinateType, Rank>              point,
-                             MassType                                      mass) {
-        st::bounding_box<CoordinateType, Rank> boundary = _boundary;
-        while (true) {
-            assert(_boundary.contains(point));
-            assert(branch_index < branches_.size());
-
-            tree_branch& branch = branches_[branch_index];
-            ++branch.size;
-            if (branch.is_terminal()) [[unlikely]] {
-                break;
-            }
-
-            const auto [new_boundary, selected_quad] = boundary.recurse(point);
-            branch_index = branch.index_of_first_child + selected_quad;
-            boundary = new_boundary;
-        }
-
-        tree_branch& terminal_branch = branches_[branch_index];
-        assert(terminal_branch.index() < leaves_.size());
-        tree_leaf& leaf = leaves_[terminal_branch.index()];
-
-        if (leaf.size < MaximumLeafSize) [[likely]] {
-            st::internal::set<CoordinateType, Rank>(leaf.coordinates[leaf.size], point);
-            leaf.masses[leaf.size] = mass;
-            return;
-        }
-
-        uint64_t index_of_freed_leaf = terminal_branch.index();
-        uint64_t new_index_of_first_child = branches_.size();
-        branches_.resize(branches_.size() + BranchingFactor);
-        assert((new_index_of_first_child - 1) % BranchingFactor == 0);
-        tree_branch& branch = branches_[branch_index];
-        branch.index_of_first_child = new_index_of_first_child;
-        branch.size = MaximumLeafSize + 1;
-
-        st::internal::unroll_for<BranchingFactor>([&](auto i) {
-            tree_branch& terminal_branch = branches_[new_index_of_first_child + i];
-            if (!freed_leaves_.empty()) {
-                terminal_branch.index(freed_leaves_.back());
-                assert(leaves_[terminal_branch.index()].size == 0);
-                freed_leaves_.pop_back();
+                st::internal::unroll_for<Rank>(
+                    [&](auto i) { branch_data_entry.position[i] /= branch.size; });
+                branch_data_entry.mass /= branch.size;
             } else {
-                terminal_branch.index(leaves_.size());
-                leaves_.resize(leaves_.size() + 1);
+                st::internal::unroll_for<spatial_tree_type::BranchingFactor>([&](auto i) {
+                    const auto& child_branch_data_entry =
+                        branch_data_[branch.index_of_first_child + i];
+                    st::internal::unroll_for<Rank>([&](auto i) {
+                        branch_data_entry.position[i] += child_branch_data_entry.position[i];
+                    });
+                    branch_data_entry.mass += child_branch_data_entry.mass;
+                });
+                st::internal::unroll_for<Rank>([&](auto i) {
+                    branch_data_entry.position[i] /= spatial_tree_type::BranchingFactor;
+                });
+                branch_data_entry.mass /= spatial_tree_type::BranchingFactor;
+            }
+        }
+    }
+
+    void update(auto& points, float dt) {
+        for (auto& point : points) {
+            const std::function<void(uint64_t, CoordinateType)> update_recursively =
+                [&](uint64_t branch_index, CoordinateType width) {
+                    const auto& branch = this->branches_[branch_index];
+                    const auto& branch_data = branch_data_[branch_index];
+
+                    // static constexpr float G = 6.67e-11;
+                    static constexpr float G = 1e5;
+                    static constexpr float EPSILON = 1e-6;
+
+                    const auto update_data = [&](const n_body_data& data) {
+                        float distance_squared =
+                            st::internal::euclidean_distance_squared_arr<CoordinateType, Rank>(
+                                point.position, data.position);
+                        float distance_3_2 = std::pow(distance_squared, 1.5);
+                        float coeff = G * data.mass / (distance_3_2 + EPSILON);
+                        st::internal::unroll_for<Rank>([&](auto i) {
+                            float acceleration = (data.position[i] - point.position[i]) * coeff;
+                            point.position[i] += point.velocity[i] * dt;
+                            point.velocity[i] += acceleration * dt;
+                        });
+                    };
+
+                    // Replace distance with fast inverse square root.
+                    auto distance_squared =
+                        st::internal::euclidean_distance_squared_arr<CoordinateType, Rank>(
+                            point.position, branch_data.position);
+
+                    if (distance_squared >= R * width) {
+                        update_data(branch_data);
+                        return;
+                    }
+
+                    if (branch.is_terminal()) {
+                        const auto& leaf = this->leaves_[branch.index()];
+                        for (uint64_t i = 0; i < branch.size; ++i) {
+                            update_data(n_body_data{leaf.coordinates[i],
+                                                    leaf.items[i].data.velocity,
+                                                    leaf.items[i].data.mass});
+                        }
+                        return;
+                    }
+
+                    st::internal::unroll_for<spatial_tree_type::BranchingFactor>([&](auto i) {
+                        update_recursively(branch.index_of_first_child + branch_index, width / 2);
+                    });
+
+                    return;
+                };
+            update_recursively(0, this->boundary_.stops[0] - this->boundary_.starts[0]);
+        }
+    }
+
+    std::vector<n_body_data> branch_data_;
+};
+
+// Function to compute orbital velocity based on distance (flat rotation curve)
+double compute_orbital_velocity(double r, double max_velocity = 5.0, double radius_scale = 5.0) {
+    // Flat rotation curve: velocity becomes constant beyond a certain radius
+    return max_velocity * (1.0 - std::exp(-r / radius_scale));
+}
+
+std::vector<n_body_data> generate_points(uint64_t size, double span) {
+    const double            galaxy_radius = span / 2;
+    const double            arm_tightness = 10.0 / span;
+    static constexpr int    arms = 3;
+    static constexpr double spread = 0.2;
+
+    std::default_random_engine             gen;
+    std::uniform_real_distribution<double> uniform(0.0, 1.0);
+    std::normal_distribution<double>       normal(0.0, spread);
+
+    std::vector<n_body_data> points;
+    for (uint64_t i = 0; i < size; ++i) {
+        int    arm = i % arms;
+        double r = galaxy_radius * std::sqrt(uniform(gen));
+        double theta = r * arm_tightness + (2 * M_PI / arms) * arm;
+        theta += normal(gen);
+        r += normal(gen);
+        double v_orbit = compute_orbital_velocity(r);
+
+        n_body_data data{0};
+        data.mass = 1;
+
+        st::internal::unroll_for<Rank>([&](auto i) {
+            if (i == 0) {
+                data.position[i] = span / 2 + r * std::cos(theta);
+                data.velocity[i] = -v_orbit * std::sin(theta);
+            } else if (i == 1) {
+                data.position[i] = span / 2 + r * std::sin(theta);
+                data.velocity[i] = v_orbit * std::cos(theta);
+            } else {
+                data.position[i] = span / 2;
             }
         });
 
-        st::internal::unroll_for<MaximumLeafSize>([&](auto i) {
-            emplace_recursively_helper(new_index_of_first_child,
-                                       boundary,
-                                       leaves_[index_of_freed_leaf].coordinates[i],
-                                       leaves_[index_of_freed_leaf].masses[i]);
-        });
-
-        leaves_[index_of_freed_leaf].reset();
-        freed_leaves_.push_back(index_of_freed_leaf);
-
-        return emplace_recursively_helper(new_index_of_first_child, boundary, point, mass);
+        points.push_back(data);
     }
+    std::array<CoordinateType, Rank> black_hole;
+    st::internal::unroll_for<Rank>([&](auto i) { black_hole[i] = CoordinateType(span / 2); });
+    points.push_back({black_hole, {0, 0}, MassType(10 * size)});
 
-    st::bounding_box<CoordinateType, Rank> boundary_;
-    std::vector<tree_branch>               branches_;
-    std::vector<tree_leaf>                 leaves_;
-    std::vector<uint32_t>                  freed_leaves_;
-
-    robin_hood::unordered_set<std::array<CoordinateType, Rank>,
-                              st::internal::point_hash<CoordinateType, Rank>,
-                              st::internal::point_equal<CoordinateType, Rank>>
-        presence_;
-};
+    return points;
+}
 
 int main(int argc, char** argv) {
     assert(argc == 2);
-    const uint32_t                                      number_of_points = std::atoi(argv[1]);
-    barnes_hut                                          solver;
-    std::vector<std::pair<std::array<float, 2>, float>> entities;
-    entities.push_back({{0, 0}, 1.0});
-    solver.build(entities);
+    const uint32_t number_of_points = std::atoi(argv[1]);
+    barnes_hut     solver;
+
+    static constexpr uint64_t WindowWidth = 800;
+    static constexpr uint64_t WindowHeight = 800;
+    std::vector<n_body_data>  entities = generate_points(number_of_points, WindowWidth);
+
+    InitWindow(WindowWidth, WindowHeight, "n-body");
+    SetTargetFPS(60);
+
+    BeginDrawing();
+    ClearBackground(RAYWHITE);
+    EndDrawing();
+
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground(BLACK);
+
+        solver.clear();
+        solver.build(entities);
+        solver.propagate();
+        solver.update(entities, GetFrameTime());
+
+        int i = 0;
+        for (auto point : entities) {
+            DrawCircle(
+                point.position[0], point.position[1], i++ == entities.size() - 1 ? 10 : 1, BLUE);
+        }
+
+        DrawFPS(10, 10);
+        EndDrawing();
+    }
+
+    CloseWindow();
+
     return 0;
 }
