@@ -35,33 +35,44 @@ static inline float isqrt(float x) {
 
     return conv.f;
 }
-
-class barnes_hut : public st::internal::
-                       spatial_tree<CoordinateType, n_body_tree_data, Rank, MaximumLeafSize, 32> {
-    using spatial_tree_type =
-        st::internal::spatial_tree<CoordinateType, n_body_tree_data, Rank, MaximumLeafSize, 32>;
-
+using spatial_tree_type =
+    st::internal::spatial_tree<CoordinateType, n_body_tree_data, Rank, MaximumLeafSize, 32, true>;
+class barnes_hut : public spatial_tree_type {
 public:
     barnes_hut() = default;
     ~barnes_hut() = default;
 
     void build(const auto& points) {
         st::bounding_box<CoordinateType, Rank> boundary;
-        boundary.stops.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
-        boundary.starts.fill(std::numeric_limits<CoordinateType>::max() / 2);
+        st::bounding_box<CoordinateType, Rank> boundary_global;
 
-        for (const auto& point : points) {
-            assert(point.mass);
+        boundary_global.stops.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
+        boundary_global.starts.fill(std::numeric_limits<CoordinateType>::max() / 2);
+
+#pragma omp parallel private(boundary)
+        {
+            boundary.stops.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
+            boundary.starts.fill(std::numeric_limits<CoordinateType>::max() / 2);
+// TODO: parallelize this
+#pragma omp parallel for
+            for (const auto& point : points) {
+                assert(point.mass);
+                st::internal::unroll_for<Rank>([&](auto i) {
+                    boundary.starts[i] = std::min(point.position[i], boundary.starts[i]);
+                    boundary.stops[i] = std::max(point.position[i], boundary.stops[i]);
+                });
+            }
+#pragma omp critical
             st::internal::unroll_for<Rank>([&](auto i) {
-                boundary.starts[i] = std::min(point.position[i], boundary.starts[i]);
-                boundary.stops[i] = std::max(point.position[i], boundary.stops[i]);
+                boundary_global.starts[i] = std::min(boundary_global.starts[i], boundary.starts[i]);
+                boundary_global.stops[i] = std::max(boundary_global.stops[i], boundary.stops[i]);
             });
         }
 
-        this->reset(boundary);
+        this->reset(boundary_global);
         for (const auto& point : points) {
             auto inserted =
-                this->try_emplace(point.position, n_body_tree_data{point.velocity, point.mass});
+                this->emplace(point.position, n_body_tree_data{point.velocity, point.mass});
             assert(inserted.second);
         }
     }
@@ -259,7 +270,7 @@ int main(int argc, char** argv) {
 
         solver.clear();
         solver.build(galaxy);
-        solver.propagate();
+        // solver.propagate();
         // solver.update(galaxy, 0.01);
 
         // float largest_magnitude = 0;

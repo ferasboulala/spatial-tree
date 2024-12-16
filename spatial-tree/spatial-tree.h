@@ -2813,6 +2813,14 @@ enum class OverlappingMode {
 };
 
 template <typename CoordinateType, uint64_t Rank>
+struct centered_box {
+    static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8);
+
+    std::array<CoordinateType, Rank> center;
+    std::array<CoordinateType, Rank> sizes;
+};
+
+template <typename CoordinateType, uint64_t Rank>
 struct bounding_box {
     static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8);
 
@@ -2976,7 +2984,8 @@ template <typename CoordinateType,
           typename StorageType,
           uint64_t Rank,
           uint32_t MaximumLeafSize = 128,
-          uint8_t  IndexBitWidth = 64>
+          uint8_t  IndexBitWidth = 64,
+          bool     AllowDuplicate = false>
 class spatial_tree {
 protected:
     static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8,
@@ -2992,8 +3001,12 @@ protected:
 
 public:
     using coordinate_type = std::array<CoordinateType, Rank>;
-    using this_type =
-        spatial_tree<CoordinateType, StorageType, Rank, MaximumLeafSize, IndexBitWidth>;
+    using this_type = spatial_tree<CoordinateType,
+                                   StorageType,
+                                   Rank,
+                                   MaximumLeafSize,
+                                   IndexBitWidth,
+                                   AllowDuplicate>;
 
     struct iterator {
         using iterator_category = std::forward_iterator_tag;
@@ -3119,15 +3132,16 @@ public:
 
     inline void reserve(uint64_t capacity) {
         assert(capacity);
-        presence_.reserve(capacity);
+        if constexpr (!AllowDuplicate) {
+            presence_.reserve(capacity);
+        }
         leaves_.reserve(capacity / MaximumLeafSize);
         branches_.reserve(BranchingFactor * capacity / MaximumLeafSize);
     }
-    inline uint64_t capacity() const { return presence_.capacity(); }
     inline uint64_t volume() const {
         return branches_.size() - BranchingFactor * freed_branches_.size();
     }
-    inline uint64_t size() const { return presence_.size(); }
+    inline uint64_t size() const { return branches_.front().size; }
     inline bool     empty() const { return size() == 0; }
     inline void     clear() {
         branches_.clear();
@@ -3138,7 +3152,9 @@ public:
         leaves_.resize(1);
         freed_leaves_.clear();
 
-        presence_.clear();
+        if constexpr (!AllowDuplicate) {
+            presence_.clear();
+        }
     }
 
     template <typename Func>
@@ -3168,44 +3184,39 @@ public:
     inline auto begin() { return iterator::iterator_begin(this); }
     inline auto end() { return iterator::iterator_end(this); }
 
+    using emplace_return_type =
+        std::conditional<AllowDuplicate, iterator, std::pair<iterator, bool>>::type;
+
     template <typename... Args>
-    inline std::pair<iterator, bool> emplace(std::array<CoordinateType, Rank> point,
-                                             Args&&... args) {
+    inline emplace_return_type emplace(std::array<CoordinateType, Rank> point, Args&&... args) {
         assert(boundary_.contains(point));
-        auto [_, inserted] = presence_.emplace(point);
-        if (!inserted) [[unlikely]] {
-            return {find(point), false};
+        if constexpr (!AllowDuplicate) {
+            auto [_, inserted] = presence_.emplace(point);
+            if (!inserted) [[unlikely]] {
+                return {find(point), false};
+            }
         }
 
         auto it = emplace_recursively(0, boundary_, point, std::forward<Args>(args)...);
 
-        return {it, true};
-    }
-
-    template <typename... Args>
-    inline std::pair<iterator, bool> try_emplace(std::array<CoordinateType, Rank> point,
-                                                 Args&&... args) {
-        assert(boundary_.contains(point));
-        auto [_, inserted] = presence_.emplace(point);
-        if (!inserted) {
-            return {end(), false};
+        if constexpr (!AllowDuplicate) {
+            return {it, true};
+        } else {
+            return it;
         }
-
-        auto it = emplace_recursively(0, boundary_, point, std::forward<Args>(args)...);
-
-        return {it, true};
     }
 
     inline bool erase(std::array<CoordinateType, Rank> point) {
         assert(boundary_.contains(point));
-        auto erased = presence_.erase(point);
-        if (!erased) [[unlikely]] {
-            return false;
+        if constexpr (!AllowDuplicate) {
+            auto erased = presence_.erase(point);
+            if (!erased) [[unlikely]] {
+                return false;
+            }
         }
 
-        erase_recursively(0, boundary_, std::numeric_limits<UnsignedIndexType>::max(), point);
-
-        return true;
+        return erase_recursively(
+            0, boundary_, std::numeric_limits<UnsignedIndexType>::max(), point);
     }
 
     inline bool contains(std::array<CoordinateType, Rank> point) const {
@@ -3235,9 +3246,12 @@ public:
               typename = typename std::enable_if<!std::is_void_v<T>>::type>
     inline auto& operator[](std::array<CoordinateType, Rank> point) {
         auto it = emplace(point);
-        assert(it.first != end());
-
-        return std::get<1>(*it.first);
+        if constexpr (AllowDuplicate) {
+            return *it;
+        } else {
+            assert(it.first != end());
+            return std::get<1>(*it.first);
+        }
     }
 
     auto nearest(std::array<CoordinateType, Rank> point) {
@@ -3466,7 +3480,7 @@ private:
         branch.reset();
     }
 
-    inline void erase_recursively(UnsignedIndexType                         branch_index,
+    inline bool erase_recursively(UnsignedIndexType                         branch_index,
                                   const bounding_box<CoordinateType, Rank>& boundary,
                                   UnsignedIndexType                parent_size_after_removal,
                                   std::array<CoordinateType, Rank> point) {
@@ -3478,7 +3492,9 @@ private:
             tree_leaf& leaf = leaves_[branch.index()];
             auto       it =
                 std::find(leaf.coordinates.begin(), leaf.coordinates.begin() + leaf.size, point);
-            assert(it != leaf.coordinates.begin() + leaf.size);
+            if (it == leaf.coordinates.begin() + leaf.size) {
+                return false;
+            }
 
             uint32_t i = std::distance(leaf.coordinates.begin(), it);
             if constexpr (!std::is_void_v<StorageType>) {
@@ -3492,20 +3508,24 @@ private:
             }
 
             assert(branch.size == leaf.size);
-            return;
+            return true;
         }
 
         const auto [new_boundary, selected_quad] = boundary.recurse(point);
-        erase_recursively(
+        const bool ret = erase_recursively(
             branch.index_of_first_child + selected_quad, new_boundary, --branch.size, point);
+
+        if (!ret) {
+            return false;
+        }
 
         // If the parent branch will fold, no need to fold here too.
         if (parent_size_after_removal <= MaximumLeafSize) {
-            return;
+            return true;
         }
 
         if (branch.size > MaximumLeafSize) {
-            return;
+            return true;
         }
 
         UnsignedIndexType index_of_first_child = branch.index_of_first_child;
@@ -3523,6 +3543,8 @@ private:
         });
         freed_branches_.push_back(index_of_first_child);
         assert(branch.size <= MaximumLeafSize);
+
+        return true;
     }
 
     inline iterator find_recursively_single(std::array<CoordinateType, Rank>   point,
