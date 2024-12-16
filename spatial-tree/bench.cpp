@@ -16,11 +16,11 @@ static constexpr uint64_t BoundaryLow = 1 << 10;
 static constexpr uint64_t BoundaryHigh = 1 << 22;
 
 struct opaque_data {
-    char opaque[64 * sizeof(void *)];
+    char opaque[sizeof(void *)];
     opaque_data() {}
 };
 using coordinate_type = float;
-using tree_type = st::internal::spatial_tree<coordinate_type, void, 2, 128, 32>;
+using tree_type = st::internal::spatial_tree<coordinate_type, opaque_data, 2, 16, 32>;
 auto create_tree() {
     return tree_type(
         st::bounding_box<coordinate_type, 2>({BegTypeless, BegTypeless, EndTypeless, EndTypeless}));

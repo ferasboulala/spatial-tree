@@ -18,7 +18,7 @@ if (USE_EMSCRIPTEN)
   add_compile_options(-O3)
 else()
   # Do not use -ffast-math because it will break floating point correctness. Use it only if coordinate types are integers.
-  add_compile_options(-O3 -march=native -Wall -Wextra -fverbose-asm)
+  add_compile_options(-O3 -march=native -Wall -Wextra -fverbose-asm -Xclang -fopenmp)
 endif()
 
 # Set C++ standard and output directories.
@@ -82,6 +82,8 @@ function(create_binary target_name entry_point)
   target_link_libraries(
     ${target_name}
     raylib
+    -lomp
+    -L/opt/homebrew/opt/libomp/lib
     )
 endfunction()
 

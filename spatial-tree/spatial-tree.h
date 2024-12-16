@@ -2975,7 +2975,7 @@ namespace internal {
 template <typename CoordinateType,
           typename StorageType,
           uint64_t Rank,
-          uint16_t MaximumLeafSize = 128,
+          uint32_t MaximumLeafSize = 128,
           uint8_t  IndexBitWidth = 64>
 class spatial_tree {
 protected:
@@ -3293,7 +3293,7 @@ private:
                                                storage_container_empty,
                                                std::array<storage_data, MaximumLeafSize>>::type;
     struct tree_leaf {
-        uint16_t                                                      size;
+        uint32_t                                                      size;
         std::array<std::array<CoordinateType, Rank>, MaximumLeafSize> coordinates;
         union {
             storage_container items;
@@ -3301,7 +3301,7 @@ private:
 
         inline tree_leaf() { reset(); }
         inline tree_leaf(const tree_leaf& other) : size(other.size) {
-            internal::unroll_for<4>(uint16_t(0), size, [&](auto i) {
+            internal::unroll_for<4>(uint32_t(0), size, [&](auto i) {
                 coordinates[i] = other.coordinates[i];
                 if constexpr (!std::is_void_v<StorageType>) {
                     items[i] = other.items[i];
@@ -3309,7 +3309,7 @@ private:
             });
         }
         inline tree_leaf(tree_leaf&& other) : size(other.size) {
-            internal::unroll_for<4>(uint16_t(0), size, [&](auto i) {
+            internal::unroll_for<4>(uint32_t(0), size, [&](auto i) {
                 coordinates[i] = other.coordinates[i];
                 if constexpr (!std::is_void_v<StorageType>) {
                     items[i] = std::move(other.items[i]);
@@ -3321,7 +3321,7 @@ private:
                 // TODO: Ensure that this is not called more than once.
                 if constexpr (!std::is_void_v<StorageType>) {
                     internal::unroll_for<4>(
-                        uint16_t(0), size, [&](auto i) { items[i].~storage_data(); });
+                        uint32_t(0), size, [&](auto i) { items[i].~storage_data(); });
                 }
             }
         }
@@ -3443,7 +3443,7 @@ private:
         tree_branch& branch = branches_[branch_index];
         if (branch.is_terminal()) {
             tree_leaf& leaf = leaves_[branch.index()];
-            for (uint16_t i = 0; i < leaf.size; ++i) {
+            for (uint32_t i = 0; i < leaf.size; ++i) {
                 target_leaf.coordinates[target_leaf.size] = leaf.coordinates[i];
                 if constexpr (!std::is_void_v<StorageType>) {
                     target_leaf.items[target_leaf.size] = std::move(leaf.items[i]);
@@ -3480,7 +3480,7 @@ private:
                 std::find(leaf.coordinates.begin(), leaf.coordinates.begin() + leaf.size, point);
             assert(it != leaf.coordinates.begin() + leaf.size);
 
-            uint16_t i = std::distance(leaf.coordinates.begin(), it);
+            uint32_t i = std::distance(leaf.coordinates.begin(), it);
             if constexpr (!std::is_void_v<StorageType>) {
                 leaf.items[i].~storage_data();
             }
@@ -3656,7 +3656,7 @@ protected:
 template <typename CoordinateType,
           typename StorageType,
           uint64_t Rank,
-          uint16_t MaximumLeafSize = 64>
+          uint32_t MaximumLeafSize = 64>
 class spatial_map
     : public internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumLeafSize> {
 public:
@@ -3666,7 +3666,7 @@ public:
         : internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumLeafSize>(boundary) {}
 };
 
-template <typename CoordinateType, uint64_t Rank, uint16_t MaximumLeafSize = 64>
+template <typename CoordinateType, uint64_t Rank, uint32_t MaximumLeafSize = 64>
 class spatial_set : public internal::spatial_tree<CoordinateType, void, Rank, MaximumLeafSize> {
 public:
     spatial_set() : internal::spatial_tree<CoordinateType, void, Rank, MaximumLeafSize>() {}
