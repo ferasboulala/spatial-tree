@@ -18,7 +18,7 @@ if (USE_EMSCRIPTEN)
   add_compile_options(-O3)
 else()
   # Do not use -ffast-math because it will break floating point correctness. Use it only if coordinate types are integers.
-  add_compile_options(-O3 -march=native -Wall -Wextra -fverbose-asm -Xclang -fopenmp)
+  add_compile_options(-O3 -march=native -ffast-math -Wall -Wextra -fverbose-asm -Xclang -fopenmp)
 endif()
 
 # Set C++ standard and output directories.

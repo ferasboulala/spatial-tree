@@ -2606,7 +2606,7 @@ namespace st {
 
 namespace internal {
 
-template <uint64_t factor, typename Func, typename InductionVarType = uint64_t>
+template <uint64_t factor, typename InductionVarType = uint64_t, typename Func>
 inline void unroll_for(InductionVarType start, InductionVarType stop, const Func& func) {
     if constexpr (factor == 2) {
         __unroll_2 for (InductionVarType i = start; i < stop; ++i) { func(i); }

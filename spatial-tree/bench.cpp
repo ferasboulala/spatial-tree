@@ -20,7 +20,7 @@ struct opaque_data {
     opaque_data() {}
 };
 using coordinate_type = float;
-using tree_type = st::internal::spatial_tree<coordinate_type, void, 2, 32, 32, true>;
+using tree_type = st::internal::spatial_tree<coordinate_type, void, 2, 1 << 15, 32, true>;
 auto create_tree() {
     return tree_type(
         st::bounding_box<coordinate_type, 2>({BegTypeless, BegTypeless, EndTypeless, EndTypeless}));
