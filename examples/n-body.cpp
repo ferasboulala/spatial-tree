@@ -230,16 +230,6 @@ static std::vector<n_body_data> generate_galaxy(uint64_t                        
     return points;
 }
 
-static inline Color magnitude_to_color(float value) {
-    Color color;
-    color.r = (unsigned char)(value * 255);           // Red increases with value
-    color.g = 0;                                      // Green remains constant
-    color.b = (unsigned char)((1.0f - value) * 255);  // Blue decreases with value
-    color.a = 255;
-
-    return color;
-}
-
 int main(int argc, char** argv) {
     assert(argc == 2);
     const uint32_t number_of_points = std::atoi(argv[1]);
@@ -249,7 +239,6 @@ int main(int argc, char** argv) {
     static constexpr uint64_t WindowHeight = 1080;
     std::vector<n_body_data>  galaxy =
         generate_galaxy(number_of_points, {WindowWidth, WindowHeight});
-    ;
 
     InitWindow(WindowWidth, WindowHeight, "2-galaxy problem");
     SetTargetFPS(60);
@@ -258,35 +247,19 @@ int main(int argc, char** argv) {
     ClearBackground(RAYWHITE);
     EndDrawing();
 
-    // std::vector<float> magnitudes;
-    // magnitudes.reserve(number_of_points);
-
     while (!WindowShouldClose()) {
         BeginDrawing();
         ClearBackground(BLACK);
 
         solver.clear();
         solver.build(galaxy);
-        // solver.propagate();
-        // solver.update(galaxy, 0.01);
+        solver.propagate();
+        solver.update(galaxy, 0.01);
 
-        // float largest_magnitude = 0;
-        // for (auto point : galaxy) {
-        //     float magnitude =
-        //         std::sqrt(st::internal::euclidean_distance_squared_arr<CoordinateType, Rank>(
-        //             point.acceleration, {0, 0}));
-        //     largest_magnitude = std::max(largest_magnitude, magnitude);
-        //     magnitudes.push_back(magnitude);
-        // }
+        for (auto point : galaxy) {
+            DrawPixel(point.position[0], point.position[1], BLUE);
+        }
 
-        // uint64_t i = 0;
-        // for (auto point : galaxy) {
-        //     DrawPixel(point.position[0],
-        //               point.position[1],
-        //               magnitude_to_color(magnitudes[i++] / largest_magnitude));
-        // }
-
-        // magnitudes.clear();
         DrawFPS(10, 10);
         EndDrawing();
     }
