@@ -1,6 +1,5 @@
 #include <raylib.h>
 
-#include <iostream>
 #include <random>
 
 #include "spatial-tree.h"
@@ -71,9 +70,7 @@ public:
 
         this->reset(boundary_global);
         for (const auto& point : points) {
-            auto inserted =
-                this->emplace(point.position, n_body_tree_data{point.velocity, point.mass});
-            assert(inserted.second);
+            this->emplace(point.position, n_body_tree_data{point.velocity, point.mass});
         }
     }
 
