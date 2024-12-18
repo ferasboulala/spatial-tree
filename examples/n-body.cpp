@@ -16,11 +16,6 @@ struct n_body_data {
     MassType                         mass;
 };
 
-struct n_body_tree_data {
-    std::array<CoordinateType, Rank> velocity;
-    MassType                         mass;
-};
-
 struct n_body_tree_data_external {
     std::array<CoordinateType, Rank> position;
     MassType                         mass;
@@ -40,7 +35,7 @@ static inline float isqrt(float x) {
     return conv.f;
 }
 using spatial_tree_type =
-    st::internal::spatial_tree<CoordinateType, n_body_tree_data, Rank, MaximumLeafSize, 32, true>;
+    st::internal::spatial_tree<CoordinateType, MassType, Rank, MaximumLeafSize, 32, true>;
 class barnes_hut : public spatial_tree_type {
 public:
     barnes_hut() = default;
@@ -75,7 +70,7 @@ public:
 
         this->reset(boundary_global);
         for (const auto& point : points) {
-            this->emplace(point.position, n_body_tree_data{point.velocity, point.mass});
+            this->emplace(point.position, point.mass);
         }
     }
 
@@ -91,14 +86,14 @@ public:
                 auto& leaf = this->leaves_[branch.index()];
                 std::for_each(leaf.items.begin(),
                               leaf.items.begin() + leaf.size,
-                              [&](const auto& data) { branch_data_entry.mass += data.data.mass; });
+                              [&](const auto& data) { branch_data_entry.mass += data.data; });
                 if (branch_data_entry.mass == 0.0) {
                     continue;
                 }
 
                 const MassType reciprocal = 1.0 / branch_data_entry.mass;
                 for (uint64_t i = 0; i < leaf.size; ++i) {
-                    const MassType weight = leaf.items[i].data.mass * reciprocal;
+                    const MassType weight = leaf.items[i].data * reciprocal;
                     st::internal::unroll_for<Rank>([&](auto j) {
                         branch_data_entry.position[j] += leaf.coordinates[i][j] * weight;
                     });
@@ -137,9 +132,6 @@ public:
             st::internal::unroll_for<Rank>([&](auto i) { point.acceleration[i] = 0; });
             const std::function<void(uint64_t, float)> update_recursively = [&](auto branch_index,
                                                                                 auto span_squared) {
-                const auto& branch = this->branches_[branch_index];
-                const auto& branch_data = branch_data_[branch_index];
-
                 const auto update_data = [&](const n_body_tree_data_external& data) {
                     float distance_squared =
                         st::internal::euclidean_distance_squared_arr<CoordinateType, Rank>(
@@ -156,28 +148,35 @@ public:
                     });
                 };
 
-                float distance_squared =
-                    st::internal::euclidean_distance_squared_arr<CoordinateType, Rank>(
-                        point.position, branch_data.position);
-                if (distance_squared >= span_squared) {
-                    update_data(branch_data);
-                    return;
-                }
-
-                if (branch.is_terminal()) {
-                    const auto& leaf = this->leaves_[branch.index()];
-                    for (uint64_t i = 0; i < branch.size; ++i) {
-                        update_data(n_body_tree_data_external{leaf.coordinates[i],
-                                                              leaf.items[i].data.mass});
-                    }
-                    return;
-                }
-
+                std::array<bool, spatial_tree_type::BranchingFactor> recurse;
+                const auto& branch = this->branches_[branch_index];
                 st::internal::unroll_for<spatial_tree_type::BranchingFactor>([&](auto quad) {
-                    update_recursively(branch.index_of_first_child + quad, span_squared / 4);
+                    const auto& branch_ = this->branches_[branch.index_of_first_child + quad];
+                    const auto& branch_data__ = branch_data_[branch.index_of_first_child + quad];
+                    float       distance_squared =
+                        st::internal::euclidean_distance_squared_arr<CoordinateType, Rank>(
+                            point.position, branch_data__.position);
+                    if (distance_squared >= span_squared) {
+                        update_data(branch_data__);
+                        recurse[quad] = false;
+                    } else if (branch_.is_terminal()) {
+                        const auto& leaf = this->leaves_[branch_.index()];
+                        for (uint64_t i = 0; i < branch_.size; ++i) {
+                            update_data(
+                                n_body_tree_data_external{leaf.coordinates[i], leaf.items[i].data});
+                        }
+                        recurse[quad] = false;
+                    } else {
+                        recurse[quad] = true;
+                    }
+                });
+                st::internal::unroll_for<spatial_tree_type::BranchingFactor>([&](auto quad) {
+                    if (recurse[quad]) {
+                        update_recursively(branch.index_of_first_child + quad, span_squared / 4);
+                    }
                 });
             };
-            update_recursively(0, tree_span_squared);
+            update_recursively(0, tree_span_squared / 4);
             st::internal::unroll_for<Rank>([&](auto i) {
                 point.velocity[i] += point.acceleration[i] * dt;
                 point.position[i] += point.velocity[i] * dt;
@@ -235,9 +234,9 @@ static std::vector<n_body_data> generate_galaxy(uint64_t                        
 }
 
 int main(int argc, char** argv) {
-    assert(argc == 2);
+    assert(argc == 3);
     const uint32_t number_of_points = std::atoi(argv[1]);
-    barnes_hut     solver;
+    const bool     draw = std::atoi(argv[2]);
 
     static constexpr uint64_t        WindowWidth = 1620;
     static constexpr uint64_t        WindowHeight = 1080;
@@ -254,6 +253,7 @@ int main(int argc, char** argv) {
     ClearBackground(RAYWHITE);
     EndDrawing();
 
+    barnes_hut solver;
     while (!WindowShouldClose()) {
         BeginDrawing();
         ClearBackground(BLACK);
@@ -263,9 +263,11 @@ int main(int argc, char** argv) {
         solver.propagate();
         solver.update(galaxy, 0.05);
 
-        // for (auto point : galaxy) {
-        //     DrawPixel(point.position[0], point.position[1], BLUE);
-        // }
+        if (draw) {
+            for (auto point : galaxy) {
+                DrawPixel(point.position[0], point.position[1], BLUE);
+            }
+        }
 
         DrawFPS(10, 10);
         EndDrawing();
