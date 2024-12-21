@@ -1,6 +1,7 @@
 #include <raylib.h>
 
 #include <random>
+#include <thread>
 
 #include "spatial-tree.h"
 
@@ -17,8 +18,8 @@ struct n_body_data {
 };
 
 struct n_body_tree_data_external {
-    std::array<CoordinateType, Rank> position;
     MassType                         mass;
+    std::array<CoordinateType, Rank> position;
 };
 
 static inline float isqrt(float x) {
@@ -120,6 +121,9 @@ public:
     }
 
     void update(auto& points, float dt) {
+        static constexpr float G = 1.1;
+        dt *= G;
+
         float tree_span = 0;
         st::internal::unroll_for<Rank>([&](auto i) {
             tree_span =
@@ -127,7 +131,9 @@ public:
         });
         float tree_span_squared = tree_span * tree_span;
 
-#pragma omp parallel for
+        uint64_t n_threads = std::max<int>(std::thread::hardware_concurrency() * 4, 64);
+        uint64_t num_points_per_thread = points.size() / n_threads;
+#pragma omp parallel for num_threads(n_threads) schedule(dynamic, num_points_per_thread)
         for (auto& point : points) {
             st::internal::unroll_for<Rank>([&](auto i) { point.acceleration[i] = 0; });
             const std::function<void(uint64_t, float)> update_recursively = [&](auto branch_index,
@@ -137,12 +143,11 @@ public:
                         st::internal::euclidean_distance_squared_arr<CoordinateType, Rank>(
                             point.position, data.position);
 
-                    static constexpr float G = 1.1;
                     static constexpr float EpsilonSquared = 1;
                     distance_squared += EpsilonSquared;
-                    float reciprocal = isqrt(distance_squared);
+                    float reciprocal = 1.0 / std::sqrt(distance_squared);
                     float reciprocal_squared = reciprocal * reciprocal;
-                    float coeff = G * data.mass * reciprocal * reciprocal_squared;
+                    float coeff = data.mass * reciprocal * reciprocal_squared;
                     st::internal::unroll_for<Rank>([&](auto i) {
                         point.acceleration[i] += (data.position[i] - point.position[i]) * coeff;
                     });
@@ -153,25 +158,35 @@ public:
                 st::internal::unroll_for<spatial_tree_type::BranchingFactor>([&](auto quad) {
                     const auto& branch_ = this->branches_[branch.index_of_first_child + quad];
                     const auto& branch_data__ = branch_data_[branch.index_of_first_child + quad];
-                    float       distance_squared =
+                    if (!branch_data__.mass) {
+                        recurse[quad] = false;
+                        return;
+                    }
+
+                    float distance_squared =
                         st::internal::euclidean_distance_squared_arr<CoordinateType, Rank>(
                             point.position, branch_data__.position);
                     if (distance_squared >= span_squared) {
                         update_data(branch_data__);
                         recurse[quad] = false;
-                    } else if (branch_.is_terminal()) {
+                        return;
+                    }
+
+                    if (branch_.is_terminal()) [[likely]] {
                         const auto& leaf = this->leaves_[branch_.index()];
                         for (uint64_t i = 0; i < branch_.size; ++i) {
                             update_data(
-                                n_body_tree_data_external{leaf.coordinates[i], leaf.items[i].data});
+                                n_body_tree_data_external{leaf.items[i].data, leaf.coordinates[i]});
                         }
                         recurse[quad] = false;
-                    } else {
-                        recurse[quad] = true;
+                        return;
                     }
+
+                    recurse[quad] = true;
+                    return;
                 });
                 st::internal::unroll_for<spatial_tree_type::BranchingFactor>([&](auto quad) {
-                    if (recurse[quad]) {
+                    if (recurse[quad]) [[unlikely]] {
                         update_recursively(branch.index_of_first_child + quad, span_squared / 4);
                     }
                 });
@@ -246,8 +261,7 @@ int main(int argc, char** argv) {
     }
     std::vector<n_body_data> galaxy = generate_galaxy(number_of_points, window_size);
 
-    InitWindow(WindowWidth, WindowHeight, "2-galaxy problem");
-    SetTargetFPS(60);
+    InitWindow(WindowWidth, WindowHeight, "n-body");
 
     BeginDrawing();
     ClearBackground(RAYWHITE);
