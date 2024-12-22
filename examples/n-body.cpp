@@ -6,7 +6,7 @@
 #include "spatial-tree.h"
 
 static constexpr int Rank = 2;
-static constexpr int MaximumLeafSize = 32;
+static constexpr int MaximumLeafSize = 64;
 using CoordinateType = float;
 using MassType = float;
 
@@ -22,6 +22,11 @@ struct n_body_tree_data_external {
     std::array<CoordinateType, Rank> position;
 };
 
+struct n_body_tree_data_internal {
+    MassType mass;
+    uint32_t idx;
+};
+
 static inline float isqrt(float x) {
     union {
         float    f;
@@ -35,8 +40,8 @@ static inline float isqrt(float x) {
 
     return conv.f;
 }
-using spatial_tree_type =
-    st::internal::spatial_tree<CoordinateType, MassType, Rank, MaximumLeafSize, 32, true>;
+using spatial_tree_type = st::internal::
+    spatial_tree<CoordinateType, n_body_tree_data_internal, Rank, MaximumLeafSize, 32, true>;
 class barnes_hut : public spatial_tree_type {
 public:
     barnes_hut() = default;
@@ -70,8 +75,9 @@ public:
         }
 
         this->reset(boundary_global);
+        uint32_t i = 0;
         for (const auto& point : points) {
-            this->emplace(point.position, point.mass);
+            this->emplace(point.position, n_body_tree_data_internal{point.mass, i++});
         }
     }
 
@@ -87,14 +93,14 @@ public:
                 auto& leaf = this->leaves_[branch.index()];
                 std::for_each(leaf.items.begin(),
                               leaf.items.begin() + leaf.size,
-                              [&](const auto& data) { branch_data_entry.mass += data.data; });
+                              [&](const auto& data) { branch_data_entry.mass += data.data.mass; });
                 if (branch_data_entry.mass == 0.0) {
                     continue;
                 }
 
                 const MassType reciprocal = 1.0 / branch_data_entry.mass;
                 for (uint64_t i = 0; i < leaf.size; ++i) {
-                    const MassType weight = leaf.items[i].data * reciprocal;
+                    const MassType weight = leaf.items[i].data.mass * reciprocal;
                     st::internal::unroll_for<Rank>([&](auto j) {
                         branch_data_entry.position[j] += leaf.coordinates[i][j] * weight;
                     });
@@ -118,6 +124,18 @@ public:
                 });
             }
         }
+    }
+
+    void sort(auto& points) {
+        std::vector<n_body_data> sorted(points.size());
+        uint32_t                 i = 0;
+        for (auto& leaf : this->leaves_) {
+            for (uint32_t j = 0; j < leaf.size; ++j) {
+                sorted[i++] = points[leaf.items[j].data.idx];
+            }
+        }
+
+        points = std::move(sorted);
     }
 
     void update(auto& points, float dt) {
@@ -175,8 +193,8 @@ public:
                     if (branch_.is_terminal()) [[likely]] {
                         const auto& leaf = this->leaves_[branch_.index()];
                         for (uint64_t i = 0; i < branch_.size; ++i) {
-                            update_data(
-                                n_body_tree_data_external{leaf.items[i].data, leaf.coordinates[i]});
+                            update_data(n_body_tree_data_external{leaf.items[i].data.mass,
+                                                                  leaf.coordinates[i]});
                         }
                         recurse[quad] = false;
                         return;
@@ -275,6 +293,7 @@ int main(int argc, char** argv) {
         solver.clear();
         solver.build(galaxy);
         solver.propagate();
+        solver.sort(galaxy);
         solver.update(galaxy, 0.05);
 
         if (draw) {
