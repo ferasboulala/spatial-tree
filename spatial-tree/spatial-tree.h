@@ -3333,10 +3333,8 @@ private:
         }
         inline ~tree_leaf() {
             if constexpr (!std::is_void_v<StorageType>) {
-                if constexpr (!std::is_void_v<StorageType>) {
-                    internal::unroll_for<4>(
-                        uint32_t(0), size, [&](auto i) { items[i].~storage_data(); });
-                }
+                internal::unroll_for<4>(
+                    uint32_t(0), size, [&](auto i) { items[i].~storage_data(); });
             }
         }
         inline void reset() { size = 0; }

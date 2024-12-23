@@ -1,3 +1,4 @@
+#include <arm_neon.h>
 #include <raylib.h>
 
 #include <random>
@@ -25,6 +26,12 @@ struct n_body_tree_data_external {
 struct n_body_tree_data_internal {
     MassType mass;
     uint32_t idx;
+};
+
+struct n_body_tree_leaf_simd {
+    uint32_t                                                      size;
+    std::array<std::array<CoordinateType, MaximumLeafSize>, Rank> positions;
+    std::array<MassType, MaximumLeafSize>                         masses;
 };
 
 using spatial_tree_type = st::internal::
@@ -110,22 +117,35 @@ public:
         }
     }
 
-    void sort(auto& points) {
+    void sort_and_vectorize(auto& points) {
+        leaf_data_.resize(this->leaves_.size());
         std::vector<n_body_data> sorted(points.size());
-        uint32_t                 i = 0;
-        for (auto& leaf : this->leaves_) {
-            for (uint32_t j = 0; j < leaf.size; ++j) {
-                sorted[i++] = points[leaf.items[j].data.idx];
+        for (uint32_t i = 0, j = 0; i < this->leaves_.size(); ++i) {
+            const auto& leaf = this->leaves_[i];
+            auto&       leaf_data = leaf_data_[i];
+            leaf_data.size = leaf.size;
+
+            for (uint32_t k = 0; k < leaf.size; ++k, ++j) {
+                sorted[j] = points[leaf.items[k].data.idx];
+                leaf_data.masses[k] = sorted[j].mass;
+                st::internal::unroll_for<Rank>(
+                    [&](auto l) { leaf_data.positions[l][k] = sorted[j].position[l]; });
+            }
+
+            for (uint32_t k = leaf.size; k < MaximumLeafSize; ++k) {
+                leaf_data.masses[k] = 0;
             }
         }
 
         points = std::move(sorted);
     }
 
-    void update(auto& points, float dt) {
-        static constexpr float G = 1.1;
-        dt *= G;
+    static inline float reduce_sum(float32x4_t vec) {
+        float32x2_t sum_pair = vadd_f32(vget_low_f32(vec), vget_high_f32(vec));
+        return vget_lane_f32(vpadd_f32(sum_pair, sum_pair), 0);
+    }
 
+    void update(auto& points, float dt) {
         float tree_span = 0;
         st::internal::unroll_for<Rank>([&](auto i) {
             tree_span =
@@ -175,12 +195,48 @@ public:
                     }
 
                     if (branch_.is_terminal()) [[likely]] {
-                        const auto& leaf = this->leaves_[branch_.index()];
-                        for (uint64_t i = 0; i < branch_.size; ++i) {
-                            update_data(n_body_tree_data_external{leaf.items[i].data.mass,
-                                                                  leaf.coordinates[i]});
-                        }
                         recurse[quad] = false;
+                        auto& leaf = leaf_data_[branch_.index()];
+                        std::array<CoordinateType, MaximumLeafSize> tmp;
+                        tmp.fill(1);
+                        for (uint64_t i = 0; i < Rank; ++i) {
+                            float       x = point.position[i];
+                            float32x4_t x_splat = vdupq_n_f32(x);
+                            _Pragma("clang loop unroll_count(2)") for (int64_t j = 0; j < leaf.size;
+                                                                       j += 4) {
+                                float32x4_t p = vld1q_f32(&leaf.positions[i][j]);
+                                float32x4_t delta = vsubq_f32(p, x_splat);
+                                float32x4_t delta_squared = vmulq_f32(delta, delta);
+                                float32x4_t old = vld1q_f32(&tmp[j]);
+                                float32x4_t s = vaddq_f32(delta_squared, old);
+                                vst1q_f32(&tmp[j], s);
+                            }
+                        }
+                        _Pragma("clang loop unroll_count(2)") for (int64_t j = 0; j < leaf.size;
+                                                                   j += 4) {
+                            float32x4_t t = vld1q_f32(&tmp[j]);
+                            float32x4_t m = vld1q_f32(&leaf.masses[j]);
+                            float32x4_t reciprocal = vrsqrteq_f32(t);
+                            float32x4_t reciprocal_squared = vmulq_f32(reciprocal, reciprocal);
+                            float32x4_t reciprocal_denom =
+                                vmulq_f32(reciprocal_squared, reciprocal);
+                            float32x4_t coeff = vmulq_f32(m, reciprocal_denom);
+                            vst1q_f32(&tmp[j], coeff);
+                        }
+
+                        for (uint64_t i = 0; i < Rank; ++i) {
+                            float       x = point.position[i];
+                            float32x4_t x_splat = vdupq_n_f32(x);
+                            _Pragma("clang loop unroll_count(2)") for (int64_t j = 0; j < leaf.size;
+                                                                       j += 4) {
+                                float32x4_t t = vld1q_f32(&tmp[j]);
+                                float32x4_t p = vld1q_f32(&leaf.positions[i][j]);
+                                float32x4_t delta = vsubq_f32(p, x_splat);
+                                float32x4_t to_reduce = vmulq_f32(delta, t);
+                                float       contribution = reduce_sum(to_reduce);
+                                point.acceleration[i] += contribution;
+                            }
+                        }
                         return;
                     }
 
@@ -202,6 +258,7 @@ public:
     }
 
     std::vector<n_body_tree_data_external> branch_data_;
+    std::vector<n_body_tree_leaf_simd>     leaf_data_;
 };
 
 static std::vector<n_body_data> generate_galaxy(uint64_t                         N,
@@ -369,7 +426,7 @@ int main(int argc, char** argv) {
         solver.clear();
         solver.build(galaxy);
         solver.propagate();
-        solver.sort(galaxy);
+        solver.sort_and_vectorize(galaxy);
         solver.update(galaxy, 0.05);
 
         if (draw) {

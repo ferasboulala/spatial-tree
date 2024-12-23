@@ -308,6 +308,7 @@ void simd(benchmark::State &state) {
     arrays.masses.fill(1);
     tmp.fill(0);
     position.fill(1);
+    acceleration.fill(0);
 
     int      iter = 0;
     uint64_t total = 0;
@@ -315,16 +316,19 @@ void simd(benchmark::State &state) {
         auto size = sizes[iter % sizes.size()];
         total += size;
         ++iter;
+        arrays.masses.fill(1);
+        std::fill(arrays.masses.begin() + size, arrays.masses.end(), 0);
+        tmp.fill(1);
         for (uint64_t i = 0; i < SIMDRank; ++i) {
             float       x = position[i];
             float32x4_t x_splat = vdupq_n_f32(x);
-            float32x4_t one = vdupq_n_f32(1.0);
             _Pragma("clang loop unroll_count(2)") for (int64_t j = 0; j < size; j += 4) {
                 float32x4_t p = vld1q_f32(&arrays.positions[i][j]);
                 float32x4_t delta = vsubq_f32(p, x_splat);
                 float32x4_t delta_squared = vmulq_f32(delta, delta);
-                float32x4_t delta_squared_plus_one = vaddq_f32(delta_squared, one);
-                vst1q_f32(&tmp[j], delta_squared_plus_one);
+                float32x4_t old = vld1q_f32(&tmp[j]);
+                float32x4_t s = vaddq_f32(delta_squared, old);
+                vst1q_f32(&tmp[j], s);
             }
         }
         _Pragma("clang loop unroll_count(2)") for (int64_t j = 0; j < size; j += 4) {
@@ -351,14 +355,19 @@ void simd(benchmark::State &state) {
         };
     }
     state.SetItemsProcessed(total);
-    float unused = 0;
-    for (auto x : tmp) {
-        unused += x;
-    }
-    std::cout << unused << std::endl;
+    st::internal::unroll_for<SIMDRank>([&](auto i) { std::cout << acceleration[i] << std::endl; });
 }
 
-void scalar(benchmark::State &state) {
+void print_float32x4(float32x4_t vec) {
+    float values[4];         // Array to store the vector elements
+    vst1q_f32(values, vec);  // Store the vector into the array
+
+    // Print the elements
+    printf("[%f, %f, %f, %f]\n", values[0], values[1], values[2], values[3]);
+    exit(0);
+}
+
+void sparse(benchmark::State &state) {
     struct ArrayOfStructs {
         std::array<std::array<float, SIMDRank>, SIMDSize> positions;
         std::array<float, SIMDSize>                       masses;
@@ -378,6 +387,83 @@ void scalar(benchmark::State &state) {
     structs.masses.fill(1);
     tmp.fill(0);
     position.fill(1);
+    acceleration.fill(0);
+
+    int      iter = 0;
+    uint64_t total = 0;
+    for (auto _ : state) {
+        auto size = sizes[iter % sizes.size()];
+        total += size;
+        ++iter;
+        structs.masses.fill(1);
+        std::fill(structs.masses.begin() + size, structs.masses.end(), 0);
+        for (uint64_t i = 0; i < SIMDRank; ++i) {
+            float       x = position[i];
+            float32x4_t x_splat = vdupq_n_f32(x);
+            float32x4_t one = vdupq_n_f32(1.0);
+            _Pragma("clang loop unroll_count(2)") for (int64_t j = 0; j < size; j += 4) {
+                float32x4_t p;
+                p = vld1q_lane_f32(&structs.positions[j][i], p, 0);
+                p = vld1q_lane_f32(&structs.positions[j + 1][i], p, 1);
+                p = vld1q_lane_f32(&structs.positions[j + 2][i], p, 2);
+                p = vld1q_lane_f32(&structs.positions[j + 3][i], p, 3);
+
+                float32x4_t delta = vsubq_f32(p, x_splat);
+                float32x4_t delta_squared_plus_one = vmlaq_f32(one, delta, delta);
+                vst1q_f32(&tmp[j], delta_squared_plus_one);
+            }
+        }
+        _Pragma("clang loop unroll_count(2)") for (int64_t j = 0; j < size; j += 4) {
+            float32x4_t t = vld1q_f32(&tmp[j]);
+            float32x4_t m = vld1q_f32(&structs.masses[j]);
+            float32x4_t reciprocal = vrsqrteq_f32(t);
+            float32x4_t reciprocal_squared = vmulq_f32(reciprocal, reciprocal);
+            float32x4_t reciprocal_denom = vmulq_f32(reciprocal_squared, reciprocal);
+            float32x4_t coeff = vmulq_f32(m, reciprocal_denom);
+            vst1q_f32(&tmp[j], coeff);
+        }
+
+        for (uint64_t i = 0; i < SIMDRank; ++i) {
+            float       x = position[i];
+            float32x4_t x_splat = vdupq_n_f32(x);
+            _Pragma("clang loop unroll_count(2)") for (int64_t j = 0; j < size; j += 4) {
+                float32x4_t p;
+                p = vld1q_lane_f32(&structs.positions[j][i], p, 0);
+                p = vld1q_lane_f32(&structs.positions[j + 1][i], p, 1);
+                p = vld1q_lane_f32(&structs.positions[j + 2][i], p, 2);
+                p = vld1q_lane_f32(&structs.positions[j + 3][i], p, 3);
+
+                float32x4_t t = vld1q_f32(&tmp[j]);
+                float32x4_t delta = vsubq_f32(p, x_splat);
+                float32x4_t to_reduce = vmulq_f32(delta, t);
+                float       contribution = reduce_sum(to_reduce);
+                acceleration[i] += contribution;
+            }
+        };
+    }
+    state.SetItemsProcessed(total);
+    st::internal::unroll_for<SIMDRank>([&](auto i) { std::cout << acceleration[i] << std::endl; });
+}
+
+void scalar(benchmark::State &state) {
+    struct ArrayOfStructs {
+        std::array<std::array<float, SIMDRank>, SIMDSize> positions;
+        std::array<float, SIMDSize>                       masses;
+    };
+    ArrayOfStructs                          structs;
+    std::array<float, SIMDRank>             position;
+    std::array<float, SIMDRank>             acceleration;
+    std::default_random_engine              gen;
+    std::uniform_int_distribution<unsigned> uniform(SIMDSize / 3, SIMDSize / 2);
+    std::vector<unsigned>                   sizes(SIMDSize);
+    for (unsigned i = 0; i < SIMDSize; ++i) {
+        sizes[i] = uniform(gen);
+    }
+
+    memset(&structs, 0, sizeof(structs));
+    structs.masses.fill(1);
+    position.fill(1);
+    acceleration.fill(0);
 
     int      iter = 0;
     uint64_t total = 0;
@@ -389,11 +475,9 @@ void scalar(benchmark::State &state) {
             auto distance_squared = st::internal::euclidean_distance_squared_arr<float, SIMDRank>(
                 position, structs.positions[i]);
             distance_squared += 1;
-            // auto reciprocal = vgetq_lane_f32(vrsqrteq_f32(vdupq_n_f32(distance_squared)), 0);
             auto reciprocal = 1.0 / std::sqrt(distance_squared);
             auto reciprocal_squared = reciprocal * reciprocal;
             auto coeff = structs.masses[i] * reciprocal * reciprocal_squared;
-            tmp[i] = coeff;
             st::internal::unroll_for<SIMDRank>([&](auto j) {
                 auto contribution = coeff * (structs.positions[i][j] - position[j]);
                 acceleration[j] += contribution;
@@ -401,11 +485,7 @@ void scalar(benchmark::State &state) {
         }
     }
     state.SetItemsProcessed(total);
-    float unused = 0;
-    for (auto x : tmp) {
-        unused += x;
-    }
-    std::cout << unused << std::endl;
+    st::internal::unroll_for<SIMDRank>([&](auto i) { std::cout << acceleration[i] << std::endl; });
 }
 
 BENCHMARK(insertions)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
@@ -419,5 +499,6 @@ BENCHMARK(nearest)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(iteration)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(scalar)->Iterations(SIMDRepititions);
 BENCHMARK(simd)->Iterations(SIMDRepititions);
+BENCHMARK(sparse)->Iterations(SIMDRepititions);
 
 BENCHMARK_MAIN();
