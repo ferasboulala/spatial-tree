@@ -11,9 +11,9 @@ using CoordinateType = float;
 using MassType = float;
 
 struct n_body_data {
-    std::array<CoordinateType, Rank> position;
-    std::array<CoordinateType, Rank> velocity;
     std::array<CoordinateType, Rank> acceleration;
+    std::array<CoordinateType, Rank> velocity;
+    std::array<CoordinateType, Rank> position;
     MassType                         mass;
 };
 
@@ -27,19 +27,6 @@ struct n_body_tree_data_internal {
     uint32_t idx;
 };
 
-static inline float isqrt(float x) {
-    union {
-        float    f;
-        uint32_t i;
-    } conv;
-
-    float x2 = x * 0.5F;
-    conv.f = x;
-    conv.i = 0x5f3759df - (conv.i >> 1);
-    conv.f = conv.f * (1.5F - (x2 * conv.f * conv.f));
-
-    return conv.f;
-}
 using spatial_tree_type = st::internal::
     spatial_tree<CoordinateType, n_body_tree_data_internal, Rank, MaximumLeafSize, 32, true>;
 class barnes_hut : public spatial_tree_type {
@@ -50,15 +37,12 @@ public:
     void build(const auto& points) {
         st::bounding_box<CoordinateType, Rank> boundary;
         st::bounding_box<CoordinateType, Rank> boundary_global;
-
         boundary_global.stops.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
         boundary_global.starts.fill(std::numeric_limits<CoordinateType>::max() / 2);
-
 #pragma omp parallel private(boundary)
         {
             boundary.stops.fill(std::numeric_limits<CoordinateType>::lowest() / 2);
             boundary.starts.fill(std::numeric_limits<CoordinateType>::max() / 2);
-// TODO: parallelize this
 #pragma omp parallel for
             for (const auto& point : points) {
                 assert(point.mass);
@@ -153,7 +137,7 @@ public:
         uint64_t num_points_per_thread = points.size() / n_threads;
 #pragma omp parallel for num_threads(n_threads) schedule(dynamic, num_points_per_thread)
         for (auto& point : points) {
-            st::internal::unroll_for<Rank>([&](auto i) { point.acceleration[i] = 0; });
+            point.acceleration.fill(0);
             const std::function<void(uint64_t, float)> update_recursively = [&](auto branch_index,
                                                                                 auto span_squared) {
                 const auto update_data = [&](const n_body_tree_data_external& data) {
@@ -266,6 +250,101 @@ static std::vector<n_body_data> generate_galaxy(uint64_t                        
     return points;
 }
 
+static std::vector<n_body_data> generate_plummer(uint64_t                         N,
+                                                 std::array<CoordinateType, Rank> window_size) {
+    CoordinateType span = std::numeric_limits<CoordinateType>::max();
+    st::internal::unroll_for<Rank>([&](auto i) { span = std::min(span, window_size[i]); });
+    span /= 2;
+
+    std::default_random_engine                     gen;
+    std::uniform_real_distribution<CoordinateType> uniform(0.0, 1.0);
+    static constexpr CoordinateType                Velocity = 30;
+    std::vector<n_body_data>                       points(N);
+    for (uint64_t i = 0; i < N; ++i) {
+        CoordinateType theta = uniform(gen) * 2 * M_PI;
+
+        n_body_data data;
+        data.mass = 10;
+
+        CoordinateType dist = uniform(gen);
+        CoordinateType x = std::cos(theta) * dist;
+        CoordinateType y = std::sin(theta) * dist;
+
+        data.position[0] = x * span + window_size[0] / 2;
+        data.position[1] = y * span + window_size[1] / 2;
+
+        CoordinateType denom = dist * dist + 0.2;
+        data.velocity[0] = -y / denom * Velocity;
+        data.velocity[1] = x / denom * Velocity;
+
+        points[i] = data;
+    }
+
+    return points;
+}
+
+// Define a struct for a 3D vector
+typedef struct {
+    float x, y, z;
+} vec3f;
+
+// Function to add two vectors
+vec3f vec3f_add(vec3f a, vec3f b) { return (vec3f){a.x + b.x, a.y + b.y, a.z + b.z}; }
+
+// Function to multiply a vector by a scalar
+vec3f vec3f_scale(vec3f v, float s) { return (vec3f){v.x * s, v.y * s, v.z * s}; }
+
+// Clamp a value between 0 and 1
+float clamp(float v, float min, float max) {
+    if (v < min) return min;
+    if (v > max) return max;
+    return v;
+}
+
+// Convert a float in the range [0, 1] to an 8-bit color channel
+uint8_t float_to_color_channel(float v) { return (uint8_t)(clamp(v, 0.0f, 1.0f) * 255.0f); }
+
+// The inferno function
+vec3f inferno(float t) {
+    // Coefficients
+    const vec3f c0 = {0.00021894037f, 0.0016510046f, -0.019480899f};
+    const vec3f c1 = {0.10651341949f, 0.5639564368f, 3.9327123889f};
+    const vec3f c2 = {11.6024930825f, -3.972853966f, -15.94239411f};
+    const vec3f c3 = {-41.703996131f, 17.436398882f, 44.354145199f};
+    const vec3f c4 = {77.1629356994f, -33.40235894f, -81.80730926f};
+    const vec3f c5 = {-71.319428245f, 32.626064264f, 73.209519858f};
+    const vec3f c6 = {25.1311262248f, -12.24266895f, -23.07032500f};
+
+    // Polynomial evaluation
+    vec3f result = vec3f_add(c0, vec3f_scale(c1, t));
+    result = vec3f_add(result, vec3f_scale(c2, t * t));
+    result = vec3f_add(result, vec3f_scale(c3, t * t * t));
+    result = vec3f_add(result, vec3f_scale(c4, t * t * t * t));
+    result = vec3f_add(result, vec3f_scale(c5, t * t * t * t * t));
+    result = vec3f_add(result, vec3f_scale(c6, t * t * t * t * t * t));
+
+    // Convert to linear color space
+    return result;
+}
+
+// Function to convert a value between 0 and 1 into an inferno RGB color
+Color inferno_to_rgb(float value) {
+    // Clamp value between 0 and 1
+    value = clamp(value, 0.0f, 1.0f);
+
+    // Get the inferno color
+    vec3f color = inferno(value);
+
+    // Convert to 8-bit RGB channels
+    Color c;
+    c.r = float_to_color_channel(color.x);
+    c.g = float_to_color_channel(color.y);
+    c.b = float_to_color_channel(color.z);
+    c.a = 255;
+
+    return c;
+}
+
 int main(int argc, char** argv) {
     assert(argc == 3);
     const uint32_t number_of_points = std::atoi(argv[1]);
@@ -274,10 +353,7 @@ int main(int argc, char** argv) {
     static constexpr uint64_t        WindowWidth = 1620;
     static constexpr uint64_t        WindowHeight = 1080;
     std::array<CoordinateType, Rank> window_size = {WindowWidth, WindowHeight};
-    if constexpr (Rank == 3) {
-        window_size[2] = WindowHeight;
-    }
-    std::vector<n_body_data> galaxy = generate_galaxy(number_of_points, window_size);
+    std::vector<n_body_data>         galaxy = generate_plummer(number_of_points, window_size);
 
     InitWindow(WindowWidth, WindowHeight, "n-body");
 
@@ -298,7 +374,11 @@ int main(int argc, char** argv) {
 
         if (draw) {
             for (auto point : galaxy) {
-                DrawPixel(point.position[0], point.position[1], BLUE);
+                auto magnitude =
+                    std::pow(st::internal::euclidean_distance_squared_arr<CoordinateType, Rank>(
+                                 point.velocity, {0, 0}),
+                             0.48);
+                DrawPixel(point.position[0], point.position[1], inferno_to_rgb(magnitude / 64));
             }
         }
 

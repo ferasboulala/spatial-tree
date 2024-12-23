@@ -3132,6 +3132,7 @@ public:
 
     inline void reserve(uint64_t capacity) {
         assert(capacity);
+        assert(capacity <= std::numeric_limits<SignedIndexType>::max() / 2);
         if constexpr (!AllowDuplicate) {
             presence_.reserve(capacity);
         }
@@ -3332,7 +3333,6 @@ private:
         }
         inline ~tree_leaf() {
             if constexpr (!std::is_void_v<StorageType>) {
-                // TODO: Ensure that this is not called more than once.
                 if constexpr (!std::is_void_v<StorageType>) {
                     internal::unroll_for<4>(
                         uint32_t(0), size, [&](auto i) { items[i].~storage_data(); });
