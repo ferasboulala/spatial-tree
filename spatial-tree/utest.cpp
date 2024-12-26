@@ -366,13 +366,13 @@ TEST(TestSpatialTree, BinarySearch) {
     tree.emplace({0});
     tree.emplace({2});
     tree.emplace({4});
-    auto nearest = tree.nearest({3});
+    auto nearest = tree.nearest({3}, 2);
     ASSERT_EQ(nearest.size(), 2);
     tree.erase({0});
-    nearest = tree.nearest({3});
+    nearest = tree.nearest({3}, 2);
     ASSERT_EQ(nearest.size(), 2);
     tree.erase({2});
-    nearest = tree.nearest({3});
+    nearest = tree.nearest({3}, 1);
     ASSERT_EQ(nearest.size(), 1);
 }
 
@@ -381,13 +381,13 @@ TEST(TestSpatialTree, Octree) {
     tree.emplace({0, 0, 0});
     tree.emplace({2, 2, 2});
     tree.emplace({4, 4, 4});
-    auto nearest = tree.nearest({3, 3, 3});
+    auto nearest = tree.nearest({3, 3, 3}, 2);
     ASSERT_EQ(nearest.size(), 2);
     tree.erase({0, 0, 0});
-    nearest = tree.nearest({3, 3, 3});
+    nearest = tree.nearest({3, 3, 3}, 2);
     ASSERT_EQ(nearest.size(), 2);
     tree.erase({2, 2, 2});
-    nearest = tree.nearest({3, 3, 3});
+    nearest = tree.nearest({3, 3, 3}, 1);
     ASSERT_EQ(nearest.size(), 1);
 }
 
@@ -874,6 +874,10 @@ TEST(TestSpatialTree, Nearest) {
                             const auto [p2, nearest_val2] = *it;
                             const CoordT distance2 =
                                 st::internal::euclidean_distance_squared(x_, p2[0], y_, p2[1]);
+                                if (distance2 != distance1) {
+                                    std::cout << distance2 << ", " << distance1 << std::endl;
+                                    std::cout << nearest_points.size() << "\n";
+                                }
                             return distance2 == distance1;
                         }));
                 }

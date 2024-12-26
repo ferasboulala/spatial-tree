@@ -3292,18 +3292,24 @@ public:
         }
     }
 
-    auto nearest(std::array<CoordinateType, Rank> point) {
-        CoordinateType        nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
-        std::vector<iterator> results;
-        nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
+    auto nearest(std::array<CoordinateType, Rank> point, uint64_t K = 1) {
+        assert(K <= size());
+        std::vector<iterator>       results;
+        std::vector<CoordinateType> distances_squared;
+        results.reserve(K);
+        distances_squared.reserve(K);
+        nearest_recursively(0, boundary_, point, results, distances_squared, K);
 
         return results;
     }
 
-    auto nearest(std::array<CoordinateType, Rank> point) const {
-        CoordinateType        nearest_distance_squared = std::numeric_limits<CoordinateType>::max();
-        std::vector<iterator> results;
-        nearest_recursively(0, boundary_, point, nearest_distance_squared, results);
+    auto nearest(std::array<CoordinateType, Rank> point, uint64_t K = 1) const {
+        assert(K <= size());
+        std::vector<iterator>       results;
+        std::vector<CoordinateType> distances_squared;
+        results.reserve(K);
+        distances_squared.reserve(K);
+        nearest_recursively(0, boundary_, point, results, distances_squared, K);
 
         return results;
     }
@@ -3645,27 +3651,34 @@ private:
     void nearest_recursively(UnsignedIndexType                         branch_index,
                              const bounding_box<CoordinateType, Rank>& boundary,
                              std::array<CoordinateType, Rank>          point,
-                             CoordinateType&                           nearest_distance_squared,
-                             std::vector<iterator>&                    results) {
+                             std::vector<iterator>&                    results,
+                             std::vector<CoordinateType>&              distances_squared,
+                             uint64_t                                  K) {
         assert(branch_index < branches_.size());
+        assert(results.size() == distances_squared.size());
+        assert(results.size() <= K);
 
         tree_branch& node = branches_[branch_index];
 
         if (node.is_terminal()) [[unlikely]] {
+            /// TODO: Optimize this by sorting the contents of the leaf and stopping the iteration
+            /// once the next item is too far.
             tree_leaf& leaf = leaves_[node.index()];
             for (uint64_t i = 0; i < node.size; ++i) {
-                CoordinateType distance = euclidean_distance_squared_arr<CoordinateType, Rank>(
-                    point, leaf.coordinates[i]);
-                if (distance > nearest_distance_squared) {
-                    continue;
+                CoordinateType distance_squared =
+                    euclidean_distance_squared_arr<CoordinateType, Rank>(point,
+                                                                         leaf.coordinates[i]);
+                if (results.size() < K) [[unlikely]] {
+                    results.emplace_back(this, node.index(), i);
+                    distances_squared.push_back(distance_squared);
+                } else {
+                    auto it = std::max_element(distances_squared.begin(), distances_squared.end());
+                    if (distance_squared < *it) {
+                        *it = distance_squared;
+                        uint64_t j = std::distance(distances_squared.begin(), it);
+                        results[j] = iterator(this, node.index(), i);
+                    }
                 }
-
-                if (distance < nearest_distance_squared) {
-                    results.clear();
-                    nearest_distance_squared = distance;
-                }
-
-                results.emplace_back(this, node.index(), i);
             }
             return;
         }
@@ -3678,17 +3691,21 @@ private:
         nearest_recursively(node.index_of_first_child + selected_quad,
                             new_boundaries[selected_quad],
                             point,
-                            nearest_distance_squared,
-                            results);
+                            results,
+                            distances_squared,
+                            K);
 
         internal::unroll_for<BranchingFactor - 1>(uint64_t(1), BranchingFactor, [&](auto i) {
             uint64_t quad = (i + selected_quad) % BranchingFactor;
-            if (new_boundaries[quad].sdistance(point) <= nearest_distance_squared) {
+            if (results.empty() ||
+                new_boundaries[quad].sdistance(point) <
+                    *std::max_element(distances_squared.begin(), distances_squared.end())) {
                 nearest_recursively(node.index_of_first_child + quad,
                                     new_boundaries[quad],
                                     point,
-                                    nearest_distance_squared,
-                                    results);
+                                    results,
+                                    distances_squared,
+                                    K);
             }
         });
     }
