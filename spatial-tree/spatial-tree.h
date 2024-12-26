@@ -3729,10 +3729,9 @@ protected:
 
 template <typename CoordinateType,
           typename StorageType,
-          uint64_t Rank,
-          uint32_t MaximumLeafSize = 64>
+          uint64_t Rank>
 class spatial_map
-    : public internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumLeafSize> {
+    : public internal::spatial_tree<CoordinateType, StorageType, Rank> {
 public:
     static_assert(!std::is_void_v<StorageType>, "For no storage type, use st::spatial_set");
     spatial_map() : internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumLeafSize>() {}
@@ -3742,8 +3741,8 @@ public:
         : internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumLeafSize>(boundary) {}
 };
 
-template <typename CoordinateType, uint64_t Rank, uint32_t MaximumLeafSize = 64>
-class spatial_set : public internal::spatial_tree<CoordinateType, void, Rank, MaximumLeafSize> {
+template <typename CoordinateType, uint64_t Rank>
+class spatial_set : public internal::spatial_tree<CoordinateType, void, Rank> {
 public:
     spatial_set() : internal::spatial_tree<CoordinateType, void, Rank, MaximumLeafSize>() {}
     spatial_set(std::initializer_list<CoordinateType> boundary)
