@@ -3011,7 +3011,7 @@ public:
     template <bool Strict = false>
     inline OverlappingMode overlaps(const bounding_box<CoordinateType, Rank>& other) const {
         const bool is_encompassing = encompasses<0, Strict>(other, other.stops);
-        const auto                       origin = other.origin();
+        const auto origin = other.origin();
         std::array<CoordinateType, Rank> nearest_point;
         internal::unroll_for<Rank>([&](auto i) {
             const auto size = other.stops[i] - other.starts[i];

@@ -171,6 +171,43 @@ void find(benchmark::State &state) {
     state.SetItemsProcessed(n_bounding_boxes * state.iterations());
 }
 
+void find_sphere(benchmark::State &state) {
+    static constexpr coordinate_type BEG = BegTypeless;
+    static constexpr coordinate_type END = EndTypeless;
+    static constexpr coordinate_type RANGE = END - BEG;
+    static constexpr double          SPHERE_DIM_RATIO = 0.1;
+    static constexpr double          SPHERE_DIM_RADIUS = SPHERE_DIM_RATIO * RANGE;
+
+    const uint64_t test_size = state.range(0);
+    const auto     points = generate_points(test_size);
+
+    auto tree = create_tree();
+    tree.reserve(test_size);
+    for (uint64_t i = 0; i < test_size; ++i) {
+        auto [x, y] = points[i];
+        tree.emplace({x, y});
+    }
+
+    static constexpr uint64_t                   n_spheres = 1 << 16;
+    const auto                                  sphere_centers = generate_points(n_spheres);
+    std::vector<st::sphere<coordinate_type, 2>> spheres;
+    spheres.reserve(n_spheres);
+    for (uint64_t i = 0; i < n_spheres; ++i) {
+        auto [x, y] = sphere_centers[i];
+        spheres.push_back(st::sphere<coordinate_type, 2>({SPHERE_DIM_RADIUS, {x, y}}));
+    }
+
+    uint64_t n_points_found = 0;
+    for (auto _ : state) {
+        for (const auto &sphere : spheres) {
+            tree.find(sphere, [&](const auto) { ++n_points_found; });
+        }
+        benchmark::ClobberMemory();
+    }
+    state.counters["found"] = n_points_found / state.iterations() / n_spheres;
+    state.SetItemsProcessed(n_spheres * state.iterations());
+}
+
 void find_single(benchmark::State &state) {
     static constexpr coordinate_type BEG = BegTypeless;
     static constexpr coordinate_type END = EndTypeless;
@@ -282,6 +319,7 @@ BENCHMARK(insertions_duplicate)->RangeMultiplier(2)->Range(BoundaryLow, Boundary
 BENCHMARK(deletions)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(deletions_non_existent)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(find)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
+BENCHMARK(find_sphere)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(find_single)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(contains)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(nearest)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
