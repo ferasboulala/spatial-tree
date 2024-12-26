@@ -20,28 +20,29 @@ int main() {
     }
 
     int counter = 0;
-    my_quad_tree.find({-5.0, -5.0, 5.0, 5.0}, [&](auto) { ++counter; });
+    my_quad_tree.find({-5.0, -5.0, 5.0, 5.0}, [&](auto it) {
+        ++counter;
+        auto [x, y] = *it;
+        std::cout << x << ", " << y << std::endl;
+    });
     if (counter != 2) {
         std::cerr << "Could not find all points that were added" << std::endl;
         return 3;
     }
 
-    auto nearest_points = my_quad_tree.nearest({0.1, 0.1});
-    if (nearest_points.size() != 1) {
-        std::cerr << "Not the right number of points" << std::endl;
-        return 4;
-    }
-
-    auto coordinates = *nearest_points.front();
+    const auto nearest_points = my_quad_tree.nearest({0.1, 0.1}, 1);
+    const auto& coordinates = *nearest_points.front();
     if (coordinates[0] != 0 || coordinates[1] != 0) {
         std::cerr << "Should be <0, 0>" << std::endl;
-        return 5;
+        return 4;
     }
 
     if (!my_quad_tree.erase({0.0, 0.0})) {
         std::cerr << "Could not erase <0, 0>" << std::endl;
-        return 6;
+        return 5;
     }
+
+    std::cout << "Success!" << std::endl;
 
     return 0;
 }
