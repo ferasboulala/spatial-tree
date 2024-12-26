@@ -37,6 +37,19 @@ endif()
 set(BENCHMARK_ENABLE_GTEST_TESTS OFF)
 add_subdirectory(third-party/raylib)
 
+add_library(imgui
+    third-party/imgui/imgui.cpp
+    third-party/imgui/imgui_demo.cpp
+    third-party/imgui/imgui_draw.cpp
+    third-party/imgui/imgui_tables.cpp
+    third-party/imgui/imgui_widgets.cpp
+)
+add_library(rlimgui
+    third-party/rlImGui/rlImGui.cpp
+)
+target_include_directories(rlimgui PUBLIC third-party/imgui third-party/raylib)
+target_link_libraries(rlimgui raylib imgui)
+
 if (NOT USE_EMSCRIPTEN)
   enable_testing()
   set(BENCHMARK_ENABLE_GTEST_TESTS OFF)
@@ -78,11 +91,13 @@ function(create_binary target_name entry_point)
   target_include_directories(
     ${target_name}
     PUBLIC
+    third-party/rlImGui
     ${CMAKE_SOURCE_DIR}/spatial-tree)
   target_link_libraries(
     ${target_name}
     raylib
-    )
+    rlimgui
+  )
 endfunction()
 
-create_binary("draw" examples/draw.cpp)
+create_binary("demo" examples/demo.cpp)

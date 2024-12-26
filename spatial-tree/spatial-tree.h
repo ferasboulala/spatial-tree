@@ -2813,14 +2813,6 @@ enum class OverlappingMode {
 };
 
 template <typename CoordinateType, uint64_t Rank>
-struct centered_box {
-    static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8);
-
-    std::array<CoordinateType, Rank> center;
-    std::array<CoordinateType, Rank> sizes;
-};
-
-template <typename CoordinateType, uint64_t Rank>
 struct bounding_box {
     static_assert(Rank > 0 && Rank <= sizeof(uint64_t) * 8);
 
@@ -2975,6 +2967,69 @@ struct bounding_box {
         });
 
         return distance_squared;
+    }
+};
+
+template <typename CoordinateType, uint64_t Rank>
+struct sphere {
+    static_assert(Rank > 1);
+
+    CoordinateType                   radius;
+    std::array<CoordinateType, Rank> center;
+
+    template <bool Strict = false>
+    inline bool contains(std::array<CoordinateType, Rank> point) const {
+        const auto distance =
+            internal::euclidean_distance_squared_arr<CoordinateType, Rank>(center, point);
+        if constexpr (Strict) {
+            return distance < (radius * radius);
+        }
+
+        return distance <= (radius * radius);
+    }
+
+private:
+    template <uint64_t Dim = 0, bool Strict>
+    inline bool encompasses(const auto bbox, const auto point) const {
+        if constexpr (Dim == Rank) {
+            return contains<Strict>(point);
+        } else {
+            auto new_point_1 = point;
+            auto new_point_2 = point;
+            new_point_1[Dim] = bbox.starts[Dim];
+            new_point_2[Dim] = bbox.stops[Dim];
+
+            bool ret = true;
+            ret &= encompasses<Dim + 1, Strict>(bbox, new_point_1);
+            ret &= encompasses<Dim + 1, Strict>(bbox, new_point_2);
+
+            return ret;
+        }
+    }
+
+public:
+    template <bool Strict = false>
+    inline OverlappingMode overlaps(const bounding_box<CoordinateType, Rank>& other) const {
+        const bool is_encompassing = encompasses<0, Strict>(other, other.stops);
+        const auto                       origin = other.origin();
+        std::array<CoordinateType, Rank> nearest_point;
+        internal::unroll_for<Rank>([&](auto i) {
+            const auto size = other.stops[i] - other.starts[i];
+            const auto offset = size / 2;
+            const auto remainder = size - 2 * offset;
+            nearest_point[i] =
+                std::max(origin[i] - offset, std::min(center[i], origin[i] + offset + remainder));
+        });
+        const bool is_overlapping = contains<Strict>(nearest_point);
+
+        if (is_encompassing) {
+            assert(is_overlapping);
+            return OverlappingMode::Encompasses;
+        } else if (is_overlapping) {
+            return OverlappingMode::Overlaps;
+        }
+
+        return OverlappingMode::Disjoint;
     }
 };
 
@@ -3158,28 +3213,6 @@ public:
         }
     }
 
-    template <typename Func>
-    void walk(Func func) const {
-        const std::function<void(UnsignedIndexType, const bounding_box<CoordinateType, Rank>&)>
-            walk_recursively = [&](auto branch_index, auto boundary) {
-                assert(branch_index < branches_.size());
-                const tree_branch& branch = branches_[branch_index];
-                func(boundary, branch.is_terminal());
-
-                if (branch.is_terminal()) {
-                    return;
-                }
-
-                internal::unroll_for<BranchingFactor>([&](auto child) {
-                    const uint64_t child_index = branch.index_of_first_child + child;
-                    const auto     new_boundary = boundary.qrecurse(child);
-                    walk_recursively(child_index, new_boundary);
-                });
-            };
-
-        walk_recursively(0, boundary_);
-    }
-
     inline auto begin() const { return iterator::iterator_begin(this); }
     inline auto end() const { return iterator::iterator_end(this); }
     inline auto begin() { return iterator::iterator_begin(this); }
@@ -3224,7 +3257,6 @@ public:
         return presence_.find(point) != presence_.end();
     }
 
-    /// TODO: Check why adding `inline` slows down insertions.
     inline iterator find(std::array<CoordinateType, Rank> point) {
         return find_recursively_single(point, boundary_, 0);
     }
@@ -3241,6 +3273,11 @@ public:
     template <typename Func>
     inline void find(const bounding_box<CoordinateType, Rank>& bbox, Func func) const {
         find_recursively(bbox, boundary_, 0, func);
+    }
+
+    template <typename Func>
+    inline void find(const sphere<CoordinateType, Rank>& sphere, Func func) {
+        find_recursively(sphere, boundary_, 0, func);
     }
 
     template <typename T = StorageType,
@@ -3568,8 +3605,8 @@ private:
         }
     }
 
-    template <typename Func, bool Encompasses = false>
-    inline void find_recursively(const bounding_box<CoordinateType, Rank>& bbox,
+    template <typename Region, typename Func, bool Encompasses = false>
+    inline void find_recursively(const Region&                             region,
                                  const bounding_box<CoordinateType, Rank>& boundary,
                                  UnsignedIndexType                         branch_index,
                                  Func                                      func) {
@@ -3579,7 +3616,7 @@ private:
         if (node.is_terminal()) [[unlikely]] {
             tree_leaf& leaf = leaves_[node.index()];
             for (uint64_t i = 0; i < node.size; ++i) {
-                if (Encompasses || bbox.contains(leaf.coordinates[i])) {
+                if (Encompasses || region.contains(leaf.coordinates[i])) {
                     func(iterator(this, node.index(), i));
                 }
             }
@@ -3588,19 +3625,19 @@ private:
 
         internal::unroll_for<BranchingFactor>([&](auto quad) {
             if constexpr (Encompasses) {
-                find_recursively<Func, true>(
-                    bbox, boundary, node.index_of_first_child + quad, func);
+                find_recursively<Region, Func, true>(
+                    region, boundary, node.index_of_first_child + quad, func);
                 return;
             }
 
             auto new_boundary = boundary.qrecurse(quad);
-            auto overlapping_mode = bbox.overlaps(new_boundary);
+            auto overlapping_mode = region.overlaps(new_boundary);
             if (overlapping_mode == OverlappingMode::Encompasses) {
-                find_recursively<Func, true>(
-                    bbox, new_boundary, node.index_of_first_child + quad, func);
+                find_recursively<Region, Func, true>(
+                    region, new_boundary, node.index_of_first_child + quad, func);
             } else if (overlapping_mode == OverlappingMode::Overlaps) {
-                find_recursively<Func, false>(
-                    bbox, new_boundary, node.index_of_first_child + quad, func);
+                find_recursively<Region, Func, false>(
+                    region, new_boundary, node.index_of_first_child + quad, func);
             }
         });
     }
@@ -3682,6 +3719,8 @@ class spatial_map
 public:
     static_assert(!std::is_void_v<StorageType>, "For no storage type, use st::spatial_set");
     spatial_map() : internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumLeafSize>() {}
+    spatial_map(std::initializer_list<CoordinateType> boundary)
+        : internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumLeafSize>(boundary) {}
     spatial_map(const bounding_box<CoordinateType, Rank>& boundary)
         : internal::spatial_tree<CoordinateType, StorageType, Rank, MaximumLeafSize>(boundary) {}
 };
@@ -3690,6 +3729,8 @@ template <typename CoordinateType, uint64_t Rank, uint32_t MaximumLeafSize = 64>
 class spatial_set : public internal::spatial_tree<CoordinateType, void, Rank, MaximumLeafSize> {
 public:
     spatial_set() : internal::spatial_tree<CoordinateType, void, Rank, MaximumLeafSize>() {}
+    spatial_set(std::initializer_list<CoordinateType> boundary)
+        : internal::spatial_tree<CoordinateType, void, Rank, MaximumLeafSize>(boundary) {}
     spatial_set(const bounding_box<CoordinateType, Rank>& boundary)
         : internal::spatial_tree<CoordinateType, void, Rank, MaximumLeafSize>(boundary) {}
 };

@@ -1,17 +1,45 @@
 #include <raylib.h>
+#include <rlImGui.h>
 
 #include <algorithm>
 
 #include "spatial-tree.h"
 
+class my_spatial_set : public st::spatial_set<int32_t, 2, 1> {
+public:
+    void draw() const {
+        const std::function<void(int32_t, const st::bounding_box<int32_t, 2>&)> walk_recursively =
+            [&](auto branch_index, auto boundary) {
+                assert(branch_index < this->branches_.size());
+                auto& branch = this->branches_[branch_index];
+
+                if (branch.is_terminal()) {
+                    return;
+                }
+
+                auto [x, y] = boundary.origin();
+                DrawLine(x, boundary.starts[1], x, boundary.stops[1], GRAY);
+                DrawLine(boundary.starts[0], y, boundary.stops[0], y, GRAY);
+
+                st::internal::unroll_for<BranchingFactor>([&](auto child) {
+                    const uint64_t child_index = branch.index_of_first_child + child;
+                    const auto     new_boundary = boundary.qrecurse(child);
+                    walk_recursively(child_index, new_boundary);
+                });
+            };
+
+        walk_recursively(0, this->boundary_);
+    }
+};
+
 int main() {
     static constexpr uint64_t WindowWidth = 800;
     static constexpr uint64_t WindowHeight = 800;
 
-    st::spatial_set<int32_t, 2, 1> quadtree({0, 0, WindowWidth, WindowHeight});
+    my_spatial_set quadtree({0, 0, WindowWidth, WindowHeight});
 
     InitWindow(WindowWidth, WindowHeight, "draw");
-    SetTargetFPS(60);
+    rlImGuiSetup(false);
 
     BeginDrawing();
     ClearBackground(RAYWHITE);
@@ -21,19 +49,12 @@ int main() {
         // TODO: Follow the steps here to speed up drawing:
         // https://www.reddit.com/r/raylib/comments/i6mkh0/only_clear_background_once/
         BeginDrawing();
+        rlImGuiBegin();
         ClearBackground(RAYWHITE);
         for (auto [x, y] : quadtree) {
             DrawCircle(x, y, 2, GREEN);
         }
-        quadtree.walk([&](auto bbox, bool terminal) {
-            if (terminal) {
-                return;
-            }
-
-            auto [x, y] = bbox.origin();
-            DrawLine(x, bbox.starts[1], x, bbox.stops[1], GRAY);
-            DrawLine(bbox.starts[0], y, bbox.stops[0], y, GRAY);
-        });
+        quadtree.draw();
         DrawFPS(10, 10);
         std::string size_str = std::to_string(quadtree.size());
         DrawText(size_str.c_str(), 10, 30, 10, DARKGRAY);
@@ -60,14 +81,15 @@ int main() {
             for (auto point : points_to_erase) {
                 quadtree.erase(point);
             }
-#define LIGHT_BEIGE CLITERAL(Color){200, 176, 131, 255}
             DrawRectangle(min_x, min_y, 2 * EraserRadius, 2 * EraserRadius, BLUE);
         } else if (IsKeyReleased(KEY_C)) {
             quadtree.clear();
         }
+        rlImGuiEnd();
         EndDrawing();
     }
 
+    rlImGuiShutdown();
     CloseWindow();
     return 0;
 }

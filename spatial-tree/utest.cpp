@@ -38,6 +38,44 @@ TEST(TestUnroll, TestUnroll) {
     typed_test.operator()<int>();
 }
 
+TEST(Testsphere, TestContains) {
+    const auto typed_test = [&]<typename CoordT>() {
+        const st::sphere<CoordT, 3> sphere = {5, {0, 0, 0}};
+        ASSERT_TRUE(sphere.contains({0, 0, 1}));
+        ASSERT_TRUE(sphere.contains({0, 4, 3}));
+        ASSERT_TRUE(sphere.contains({5, 0, 0}));
+        ASSERT_FALSE(sphere.contains({6, 5, 0}));
+        ASSERT_FALSE(sphere.contains({5, 6, 0}));
+        ASSERT_FALSE(sphere.contains({-6, 0, 0}));
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
+}
+
+TEST(TestSphere, TestOverlaps) {
+    const auto typed_test = [&]<typename CoordT>() {
+        const st::sphere<CoordT, 2> sphere = {5, {0, 0}};
+        ASSERT_EQ(sphere.overlaps({0, 0, 1, 1}), st::OverlappingMode::Encompasses);
+        ASSERT_EQ(sphere.overlaps({-1, -1, 1, 1}), st::OverlappingMode::Encompasses);
+        ASSERT_EQ(sphere.overlaps({-3, -3, 3, 3}), st::OverlappingMode::Encompasses);
+        ASSERT_EQ(sphere.overlaps({-3, -4, 0, 0}), st::OverlappingMode::Encompasses);
+        ASSERT_EQ(sphere.overlaps({-4, -4, 0, 0}), st::OverlappingMode::Overlaps);
+        ASSERT_EQ(sphere.overlaps({-4, -4, 3, 3}), st::OverlappingMode::Overlaps);
+        ASSERT_EQ(sphere.overlaps({-10, -10, -5, 0}), st::OverlappingMode::Overlaps);
+        ASSERT_EQ(sphere.overlaps({-10, -10, 0, -5}), st::OverlappingMode::Overlaps);
+        ASSERT_EQ(sphere.overlaps({0, 5, 10, 10}), st::OverlappingMode::Overlaps);
+        ASSERT_EQ(sphere.overlaps({-5, -5, 5, 5}), st::OverlappingMode::Overlaps);
+        ASSERT_EQ(sphere.overlaps({0, 6, 10, 10}), st::OverlappingMode::Disjoint);
+        ASSERT_EQ(sphere.overlaps({5, 5, 10, 10}), st::OverlappingMode::Disjoint);
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
+}
+
 TEST(TestBoundingBox, TestDefaultConstructor) {
     const auto typed_test = [&]<typename CoordT>() {
         const st::bounding_box<CoordT, 3> bbox;
@@ -715,6 +753,71 @@ TEST(TestSpatialTree, BBoxFind) {
 
         st::internal::spatial_tree<CoordT, int, 2> unbounded;
         inner_test.template operator()<st::internal::spatial_tree<CoordT, int, 2>>(unbounded);
+
+        st::internal::spatial_tree<CoordT, int, 2, 1> small_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<CoordT, int, 2, 1>>(small_size);
+
+        st::internal::spatial_tree<CoordT, int, 2, 16> large_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<CoordT, int, 2, 16>>(large_size);
+
+        st::internal::spatial_tree<CoordT, int, 2, 7> odd_size(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<CoordT, int, 2, 7>>(odd_size);
+    };
+
+    typed_test.operator()<float>();
+    typed_test.operator()<double>();
+    typed_test.operator()<int>();
+}
+
+TEST(TestSpatialTree, SphereFind) {
+    static constexpr int DISTRIBUTION_BEG = -10000;
+    static constexpr int DISTRIBUTION_END = 10000;
+    static constexpr int RANGE_SIZE = DISTRIBUTION_END - DISTRIBUTION_BEG + 1;
+    static_assert(RANGE_SIZE * RANGE_SIZE <= std::numeric_limits<int>::max());
+    std::random_device            device;
+    std::uniform_int_distribution distribution(static_cast<int>(DISTRIBUTION_BEG),
+                                               static_cast<int>(DISTRIBUTION_END));
+
+    const std::vector<uint64_t> test_sizes = {1, 2, 3, 7, 10, 100, 1000};
+    const auto                  typed_test = [&]<typename CoordT>() {
+        const auto inner_test = [&]<typename TreeType>(auto &tree) {
+            for (uint64_t test_size : test_sizes) {
+                std::unordered_set<int> added_points;
+                for (uint64_t i = 0; i < test_size; ++i) {
+                    const int x = distribution(device);
+                    const int y = distribution(device);
+                    tree.emplace({CoordT(x), CoordT(y)}, i);
+                }
+
+                static constexpr int N_SPHERE = 100;
+                for (int i = 0; i < N_SPHERE; ++i) {
+                    const CoordT r = std::fabs(distribution(device));
+                    const CoordT cx = distribution(device);
+                    const CoordT cy = distribution(device);
+
+                    const st::sphere<CoordT, 2> sphere = {r, {cx, cy}};
+
+                    int counter = std::count_if(tree.begin(), tree.end(), [&](auto it) {
+                        const auto [coordinates, val] = it;
+                        return sphere.contains(coordinates);
+                    });
+
+                    int rcounter = 0;
+                    tree.find(sphere, [&](auto) { ++rcounter; });
+
+                    ASSERT_EQ(counter, rcounter);
+                }
+            }
+        };
+        const st::bounding_box<CoordT, 2> bounds = {
+            DISTRIBUTION_BEG, DISTRIBUTION_BEG, DISTRIBUTION_END, DISTRIBUTION_END};
+
+        st::internal::spatial_tree<CoordT, int, 2> bounded(bounds);
+        inner_test.template operator()<st::internal::spatial_tree<CoordT, int, 2>>(bounded);
+
+        // Will not work because euclidean distance with far away points will fail.
+        // st::internal::spatial_tree<CoordT, int, 2> unbounded;
+        // inner_test.template operator()<st::internal::spatial_tree<CoordT, int, 2>>(unbounded);
 
         st::internal::spatial_tree<CoordT, int, 2, 1> small_size(bounds);
         inner_test.template operator()<st::internal::spatial_tree<CoordT, int, 2, 1>>(small_size);

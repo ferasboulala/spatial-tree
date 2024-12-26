@@ -7,3 +7,9 @@
 [submodule "third-party/benchmark"]
 	path = third-party/benchmark
 	url = https://github.com/google/benchmark.git
+[submodule "third-party/rlImGui"]
+	path = third-party/rlImGui
+	url = https://github.com/raylib-extras/rlImGui.git
+[submodule "third-party/imgui"]
+	path = third-party/imgui
+	url = https://github.com/ocornut/imgui.git
