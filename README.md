@@ -45,7 +45,7 @@ Copy `spatial-tree/spatial-tree.h` in your project and include it.
 ## Examples
 See `example.cpp` and `demo.cpp` for an interactive demo. The demo is also available here: https://ferasboulala.github.io/wasm/draw.html
 
-## Benchmarks (plugged-in M1 MAX)
+## Benchmarks (plugged-in M1 MAX, 1M points)
 Benchmarks with thousands of items per second means once the tree is constructed, that is how many "things" we can do per second. For the rest of the benchmarks like insertions, it refers to how many trees of that size we can construct per second.
 To reproduce with different sizes, compile the project using `./runbuild.sh` and then run `./bin/bench`.
 | Benchmark                                        | User Counters                               |
