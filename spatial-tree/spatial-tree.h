@@ -8,7 +8,7 @@ _______  _______  _______  _______  ___   _______  ___             _______  ____
 _ ____| ||   |    |   _   |  |   |  |   | |   _   ||       |         |   |  |   |  | ||   |___ |   |___
 |_______||___|    |__| |__|  |___|  |___| |__| |__||_______|         |___|  |___|  |_||_______||_______|
 
-Fast & dynamic spatial partitioning data structure (quad, octree, etc).
+Fast & dynamic spatial partitioning data structure (quadtree, octree, etc).
 */
 
 // Copy pasted from: https://github.com/martinus/robin-hood-hashing with some slight modifications
@@ -3669,7 +3669,7 @@ private:
 
         internal::unroll_for<BranchingFactor - 1>(uint64_t(1), BranchingFactor, [&](auto i) {
             uint64_t quad = (i + selected_quad) % BranchingFactor;
-            if (results.empty() ||
+            if (results.size() < K ||
                 new_boundaries[quad].sdistance(point) <
                     *std::max_element(distances_squared.begin(), distances_squared.end())) {
                 nearest_recursively(node.index_of_first_child + quad,
