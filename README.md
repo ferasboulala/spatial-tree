@@ -46,17 +46,16 @@ Copy `spatial-tree/spatial-tree.h` in your project and include it.
 See `example.cpp` and `demo.cpp` for an interactive demo. The demo is also available here: https://ferasboulala.github.io/wasm/draw.html
 
 ## Benchmarks (plugged-in M1 MAX, 1M points)
-Benchmarks with thousands of items per second means once the tree is constructed, that is how many "things" we can do per second. For the rest of the benchmarks like insertions, it refers to how many trees of that size we can construct per second.
 To reproduce with different sizes, compile the project using `./runbuild.sh` and then run `./bin/bench`.
 | Benchmark                                        | User Counters                               |
 |--------------------------------------------------|---------------------------------------------|
-| insertions/1048576                               | items_per_second=40.4066/s                  |
-| insertions_check_duplicates/1048576              | items_per_second=22.1092/s                  |
-| insertions_duplicate/1048576                     | items_per_second=8.67602M/s                 |
-| deletions/1048576                                | items_per_second=7.63367/s                  |
-| deletions_check_duplicates/1048576               | items_per_second=9.78012/s                  |
-| deletions_non_existent/1048576                   | items_per_second=385.227M/s                 |
-| deletions_non_existent_check_duplicates/1048576  | items_per_second=300.778M/s                 |
+| insertions/1048576                               | trees constructed=40.4066/s                 |
+| insertions_check_duplicates/1048576              | trees constructed=22.1092/s                 |
+| insertions_duplicate/1048576                     | attempts at inserting=8.67602M/s            |
+| deletions/1048576                                | trees emptied=7.63367/s                     |
+| deletions_check_duplicates/1048576               | trees emptied=9.78012/s                     |
+| deletions_non_existent/1048576                   | attempts at deleting=385.227M/s             |
+| deletions_non_existent_check_duplicates/1048576  | attempts at deleting=300.778M/s             |
 | find/1048576                                     | found=9.467k, items_per_second=69.026k/s    |
 | find_sphere/1048576                              | found=30.192k, items_per_second=35.4991k/s  |
 | find_single/1048576                              | items_per_second=9.75882M/s                 |
