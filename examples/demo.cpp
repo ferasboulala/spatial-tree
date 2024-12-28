@@ -5,7 +5,7 @@
 
 #include "spatial-tree.h"
 
-class my_spatial_set : public st::spatial_set<int32_t, 2, 1> {
+class my_spatial_set : public st::spatial_set<int32_t, 2> {
 public:
     void draw() const {
         const std::function<void(int32_t, const st::bounding_box<int32_t, 2>&)> walk_recursively =
