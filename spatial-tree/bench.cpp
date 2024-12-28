@@ -20,8 +20,10 @@ struct opaque_data {
     opaque_data() {}
 };
 using coordinate_type = float;
-using tree_type = st::internal::spatial_tree<coordinate_type, void, 2, 64, 32, true>;
+
+template <bool AllowDuplicates = false>
 auto create_tree() {
+    using tree_type = st::internal::spatial_tree<coordinate_type, void, 2, 64, 32, AllowDuplicates>;
     return tree_type(
         st::bounding_box<coordinate_type, 2>({BegTypeless, BegTypeless, EndTypeless, EndTypeless}));
 }
@@ -47,7 +49,7 @@ void insertions(benchmark::State &state) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(test_size);
 
-    auto tree = create_tree();
+    auto tree = create_tree<true>();
     tree.reserve(test_size);
     for (auto _ : state) {
         state.PauseTiming();
@@ -61,14 +63,34 @@ void insertions(benchmark::State &state) {
         benchmark::ClobberMemory();
         state.ResumeTiming();
     }
-    state.counters["volume"] = tree.volume();
+    state.SetItemsProcessed(state.iterations());
+}
+
+void insertions_check_duplicates(benchmark::State &state) {
+    const uint64_t test_size = state.range(0);
+    const auto     points = generate_points(test_size);
+
+    auto tree = create_tree<false>();
+    tree.reserve(test_size);
+    for (auto _ : state) {
+        state.PauseTiming();
+        tree.clear();
+        state.ResumeTiming();
+        for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = points[i];
+            benchmark::DoNotOptimize(tree.emplace({x, y}));
+        }
+        state.PauseTiming();
+        benchmark::ClobberMemory();
+        state.ResumeTiming();
+    }
     state.SetItemsProcessed(state.iterations());
 }
 
 void insertions_duplicate(benchmark::State &state) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(test_size);
-    auto           tree = create_tree();
+    auto           tree = create_tree<false>();
     tree.reserve(test_size);
     for (uint64_t i = 0; i < test_size; ++i) {
         auto [x, y] = points[i];
@@ -89,7 +111,7 @@ void deletions(benchmark::State &state) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(test_size);
 
-    auto tree = create_tree();
+    auto tree = create_tree<false>();
     tree.reserve(test_size);
     for (auto _ : state) {
         state.PauseTiming();
@@ -98,7 +120,29 @@ void deletions(benchmark::State &state) {
             tree.emplace({x, y});
         }
         state.ResumeTiming();
-        for (int64_t i = test_size; i >= 0; --i) {
+        for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = points[i];
+            tree.erase({x, y});
+        }
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(state.iterations());
+}
+
+void deletions_check_duplicates(benchmark::State &state) {
+    const uint64_t test_size = state.range(0);
+    const auto     points = generate_points(test_size);
+
+    auto tree = create_tree<true>();
+    tree.reserve(test_size);
+    for (auto _ : state) {
+        state.PauseTiming();
+        for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = points[i];
+            tree.emplace({x, y});
+        }
+        state.ResumeTiming();
+        for (uint64_t i = 0; i < test_size; ++i) {
             auto [x, y] = points[i];
             tree.erase({x, y});
         }
@@ -111,7 +155,29 @@ void deletions_non_existent(benchmark::State &state) {
     const uint64_t test_size = state.range(0);
     const auto     points = generate_points(test_size);
 
-    auto tree = create_tree();
+    auto tree = create_tree<true>();
+    tree.reserve(test_size);
+    for (uint64_t i = 0; i < test_size; ++i) {
+        auto [x, y] = points[i];
+        tree.emplace({x, y});
+    }
+
+    const auto other_points = generate_points(test_size);
+    for (auto _ : state) {
+        for (uint64_t i = 0; i < test_size; ++i) {
+            auto [x, y] = other_points[i];
+            tree.erase({x, y});
+        }
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(test_size * state.iterations());
+}
+
+void deletions_non_existent_check_duplicates(benchmark::State &state) {
+    const uint64_t test_size = state.range(0);
+    const auto     points = generate_points(test_size);
+
+    auto tree = create_tree<false>();
     tree.reserve(test_size);
     for (uint64_t i = 0; i < test_size; ++i) {
         auto [x, y] = points[i];
@@ -315,9 +381,14 @@ void iteration(benchmark::State &state) {
 }
 
 BENCHMARK(insertions)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
+BENCHMARK(insertions_check_duplicates)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(insertions_duplicate)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(deletions)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
+BENCHMARK(deletions_check_duplicates)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(deletions_non_existent)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
+BENCHMARK(deletions_non_existent_check_duplicates)
+    ->RangeMultiplier(2)
+    ->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(find)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(find_sphere)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
 BENCHMARK(find_single)->RangeMultiplier(2)->Range(BoundaryLow, BoundaryHigh);
