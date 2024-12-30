@@ -3253,6 +3253,10 @@ public:
             0, boundary_, std::numeric_limits<UnsignedIndexType>::max(), point);
     }
 
+    inline bool fits(std::array<CoordinateType, Rank> point) const {
+        return boundary_.contains(point);
+    }
+
     inline bool contains(std::array<CoordinateType, Rank> point) const {
         return presence_.find(point) != presence_.end();
     }
