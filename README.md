@@ -14,7 +14,7 @@ Header only, no-dependency, dynamic and low latency spatial partitioning data st
   // Quadtree that maps points to std::string
   st::spatial_map<double, std::string, 2> quadtree_map;
   // Spatial tree that maps points to strings in 3D with a maximum leaf size of 256, using 32-bit indices and checks for duplicates
-  st::spatial_tree<float, std::string, 3, 256, 32, true> performance_tuned_tree;
+  st::internal::spatial_tree<float, std::string, 3, 256, 32, true> performance_tuned_tree;
 
   // Emplace a point
   quadtree.emplace({0.0, 1.0});
