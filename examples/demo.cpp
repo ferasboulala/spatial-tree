@@ -68,7 +68,6 @@ int main() {
     static constexpr uint64_t WindowWidth = 800;
     static constexpr uint64_t WindowHeight = 800;
     static constexpr double   BrushRateOfChange = 10;
-    static constexpr double   ColorRateOfChange = 1024;
 
     my_spatial_set quadtree({0, 0, WindowWidth, WindowHeight});
 
@@ -76,9 +75,10 @@ int main() {
     std::normal_distribution<double> normal(0.0, 1.0);
     uint64_t                         brush_size = 20;
     int64_t                          brush_radius = 20;
-    uint64_t                         color_counter = 0;
+    double                           color_counter = 0;
 
     InitWindow(WindowWidth, WindowHeight, "draw");
+    SetTargetFPS(60);
 
     BeginDrawing();
     ClearBackground(RAYWHITE);
@@ -106,12 +106,10 @@ int main() {
                 std::array<CoordinateType, 2> point = {CoordinateType(mouse_position.x + offset_x),
                                                        CoordinateType(mouse_position.y + offset_y)};
                 if (quadtree.fits(point)) {
-                    quadtree.emplace(point,
-                                     rainbow((color_counter % int(ColorRateOfChange)) /
-                                             (ColorRateOfChange - 1)));
+                    quadtree.emplace(point, rainbow(std::fmod(color_counter, 2) / 2));
                 }
             }
-            ++color_counter;
+            color_counter += GetFrameTime();
         } else if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
             std::vector<std::array<CoordinateType, 2> > points_to_erase;
             quadtree.find(st::sphere<CoordinateType, 2>{static_cast<CoordinateType>(brush_radius),
