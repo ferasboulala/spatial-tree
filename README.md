@@ -43,7 +43,7 @@ Header only, no-dependency, dynamic and low latency spatial partitioning data st
 Copy `spatial-tree/spatial-tree.h` in your project and include it.
 
 ## Examples
-See `example.cpp` and `demo.cpp` for an interactive demo. The demo is also available here: https://ferasboulala.github.io/wasm/draw.html
+See `example.cpp` and `demo.cpp` for an interactive demo. The demo is also available here: https://ferasboulala.github.io/wasm/demo.html
 
 ## Benchmarks (plugged-in M1 MAX, 1M points)
 To reproduce with different sizes, compile the project using `./runbuild.sh` and then run `./bin/bench`.
