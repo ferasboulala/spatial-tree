@@ -18,6 +18,7 @@ if (USE_EMSCRIPTEN)
   add_compile_options(-O2 -ffast-math)
 else()
   # Do not use -ffast-math because it will break floating point correctness. Use it only if coordinate types are integers.
+  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
   add_compile_options(-O2 -march=native -ffast-math -Wall -Wextra -fverbose-asm)
 endif()
 
