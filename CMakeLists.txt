@@ -14,12 +14,12 @@ if (USE_EMSCRIPTEN)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s USE_GLFW=3 -s ASSERTIONS=1 -s WASM=1 -s ASYNCIFY")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s USE_GLFW=3 -s ASSERTIONS=1 -s WASM=1 -s ASYNCIFY")
   set(CMAKE_EXECUTABLE_SUFFIX ".html")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s USE_GLFW=3 -s ASSERTIONS=1 -s WASM=1 -DPLATFORM_WEB")
-  add_compile_options(-O2 -ffast-math)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s USE_GLFW=3 -s ASSERTIONS=0 -s WASM=1 -DPLATFORM_WEB")
+  add_compile_options(-O3 -ffast-math)
 else()
   # Do not use -ffast-math because it will break floating point correctness. Use it only if coordinate types are integers.
   set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-  add_compile_options(-O2 -march=native -ffast-math -Wall -Wextra -fverbose-asm)
+  add_compile_options(-O3 -march=native -ffast-math -Wall -Wextra -fverbose-asm)
 endif()
 
 # Set C++ standard and output directories.

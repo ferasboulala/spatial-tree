@@ -153,6 +153,7 @@ int main() {
         DrawCircleLines(mouse_position.x, mouse_position.y, brush_radius, GRAY);
 
         EndDrawing();
+        UnloadTexture(tex);
     }
 
     CloseWindow();
