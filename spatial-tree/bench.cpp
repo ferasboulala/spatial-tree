@@ -372,7 +372,7 @@ void iteration(benchmark::State &state) {
 
     for (auto _ : state) {
         int i = 0;
-        for (const auto &entry : tree) {
+        for (const auto &_ : tree) {
             benchmark::DoNotOptimize(++i);
         }
         benchmark::ClobberMemory();
